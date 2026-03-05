@@ -171,7 +171,7 @@ async function prepareAndPlayVideo(videoId) {
         if (data.success && data.videoUrl) {
             // Create HTML5 video player with lyrics overlay
             videoContainer.innerHTML = `
-                <video id="localPlayer" controls autoplay style="width: 100%; height: 100%; max-height: 100%; background: #000;">
+                <video id="localPlayer" controls autoplay style="width: 100%; height: 100%; object-fit: contain; background: #000; display: block;">
                     <source src="${data.videoUrl}" type="video/mp4">
                     Your browser doesn't support HTML5 video.
                 </video>
@@ -568,8 +568,11 @@ function updateQueueDisplay(queue) {
             statusIcons = videoIcon + lyricsIcon;
         }
 
+        const thumb = `https://img.youtube.com/vi/${song.videoId}/mqdefault.jpg`;
+        const thumbStyle = `background-image: linear-gradient(to right, rgba(20,20,30,0.92) 50%, rgba(20,20,30,0.5) 100%), url('${thumb}'); background-size: cover; background-position: center;`;
+
         return `
-        <div class="queue-item" data-id="${song.id}">
+        <div class="queue-item" data-id="${song.id}" style="${thumbStyle}">
           <div class="queue-number">${index + 1}</div>
           <div class="queue-item-info">
             <div class="queue-item-title">${escapeHtml(song.title)}</div>
@@ -714,6 +717,7 @@ socket.on('room-state', (data) => {
         nowPlaying.style.display = 'block';
         nowPlayingTitle.textContent = data.currentSong.title;
         nowPlayingUser.textContent = `Added by ${data.currentSong.addedBy}`;
+        setNowPlayingThumbnail(data.currentSong.videoId);
     }
 });
 
@@ -739,6 +743,7 @@ socket.on('play-song', (data) => {
     nowPlaying.style.display = 'block';
     nowPlayingTitle.textContent = song.title;
     nowPlayingUser.textContent = `Added by ${song.addedBy}`;
+    setNowPlayingThumbnail(song.videoId);
 
     showNotification(`Now playing: ${song.title}`);
 });
@@ -771,6 +776,7 @@ socket.on('no-songs', () => {
     </div>
   `;
     nowPlaying.style.display = 'none';
+    nowPlaying.style.backgroundImage = '';
     stopLyricsSync();
 });
 
@@ -875,6 +881,14 @@ async function deleteRoom(id) {
 window.deleteRoom = deleteRoom;
 
 loadActiveRooms();
+
+// Set now playing thumbnail gradient
+function setNowPlayingThumbnail(videoId) {
+    const thumb = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+    nowPlaying.style.backgroundImage = `linear-gradient(to right, rgba(0,0,0,0.85) 40%, rgba(0,0,0,0.4) 100%), url('${thumb}')`;
+    nowPlaying.style.backgroundSize = 'cover';
+    nowPlaying.style.backgroundPosition = 'center';
+}
 
 // Expose removeSong globally
 window.removeSong = removeSong;

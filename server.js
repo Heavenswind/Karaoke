@@ -19,7 +19,8 @@ let whisperModel = process.env.WHISPER_MODEL || 'small';
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function isVideoReady(videoId) {
-    return fs.existsSync(path.join(VIDEOS_DIR, `${videoId}.mp4`));
+    return fs.existsSync(path.join(VIDEOS_DIR, `${videoId}.mp4`))
+        && fs.existsSync(path.join(VIDEOS_DIR, `${videoId}.json`));
 }
 
 function loadCachedTranscription(videoId) {

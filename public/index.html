@@ -124,7 +124,8 @@
         /* Main App */
         .app-screen {
             display: none;
-            min-height: 100vh;
+            height: 100vh;
+            overflow: hidden;
         }
 
         .app-header {
@@ -176,14 +177,17 @@
 
         /* Video Section */
         .video-section {
+            flex: 1;
             display: flex;
             flex-direction: column;
             background: #000;
             position: relative;
+            min-height: 0;
         }
 
         .video-container {
             flex: 1;
+            min-height: 0;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -313,17 +317,6 @@
             min-height: 200px;
             max-height: 30vh;
             overflow-y: auto;
-        }
-
-        .video-section {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .video-container {
-            flex: 1;
-            min-height: 80vh;
         }
 
         .lyrics-header {
@@ -639,8 +632,11 @@
         /* Now Playing */
         .now-playing {
             padding: 15px 20px;
-            background: linear-gradient(135deg, var(--primary), var(--accent));
+            background-color: var(--primary-dark);
+            background-size: cover;
+            background-position: center;
             border-bottom: 1px solid var(--bg-lighter);
+            transition: background-image 0.4s ease;
         }
 
         .now-playing-label {
