@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎤 Karaoke Party</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #8b5cf6;
+            --primary-dark: #7c3aed;
+            --bg-dark: #0f0f1a;
+            --bg-card: #1a1a2e;
+            --bg-lighter: #252542;
+            --text: #ffffff;
+            --text-muted: #a0a0b0;
+            --accent: #f472b6;
+            --success: #10b981;
+            --warning: #f59e0b;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a0a2e 100%);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Join Screen */
+        .join-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            background: radial-gradient(circle at center, #2a1a4a 0%, var(--bg-dark) 70%);
+        }
+
+        .join-screen h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .join-screen p {
+            color: var(--text-muted);
+            margin-bottom: 40px;
+        }
+
+        .join-form {
+            background: var(--bg-card);
+            padding: 40px;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 60px rgba(139, 92, 246, 0.2);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 14px 18px;
+            border: 2px solid var(--bg-lighter);
+            border-radius: 12px;
+            background: var(--bg-dark);
+            color: var(--text);
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px 24px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(139, 92, 246, 0.4);
+        }
+
+        .btn-secondary {
+            background: var(--bg-lighter);
+            color: var(--text);
+            margin-top: 10px;
+        }
+
+        /* Main App */
+        .app-screen {
+            display: none;
+            min-height: 100vh;
+        }
+
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 30px;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--bg-lighter);
+        }
+
+        .room-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .room-id {
+            background: var(--bg-lighter);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        .user-count {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-muted);
+        }
+
+        .copy-btn {
+            background: var(--primary);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 0;
+            height: calc(100vh - 70px);
+        }
+
+        /* Video Section */
+        .video-section {
+            display: flex;
+            flex-direction: column;
+            background: #000;
+            position: relative;
+        }
+
+        .video-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(180deg, #1a0a2e 0%, #0f0f1a 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .video-container video,
+        .video-container iframe {
+            width: 100%;
+            height: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        /* Karaoke Lyrics Overlay */
+        .lyrics-overlay {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 900px;
+            text-align: center;
+            z-index: 100;
+            pointer-events: none;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 12px;
+        }
+
+        .lyrics-overlay:empty {
+            display: none;
+        }
+
+        .karaoke-line {
+            font-size: 2.5rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin: 8px 0;
+            color: white;
+            text-shadow:
+                0 0 10px rgba(0, 0, 0, 0.8),
+                0 0 20px rgba(0, 0, 0, 0.6),
+                2px 2px 4px rgba(0, 0, 0, 0.9);
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .karaoke-line.current {
+            font-size: 3rem;
+        }
+
+        .karaoke-line.next {
+            font-size: 1.8rem;
+            opacity: 0.6;
+        }
+
+        /* Karaoke fill effect - word by word */
+        .karaoke-text {
+            position: relative;
+            display: inline-block;
+        }
+
+        .karaoke-text .text-bg {
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        .karaoke-text .text-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            color: #00e5ff;
+            overflow: hidden;
+            white-space: nowrap;
+            width: 0%;
+        }
+
+        .karaoke-text.sung .text-fill {
+            width: 100%;
+        }
+
+        /* Word-level karaoke */
+        .karaoke-word {
+            position: relative;
+            display: inline-block;
+            margin: 0 3px;
+        }
+
+        .karaoke-word .word-bg {
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        .karaoke-word .word-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            color: #00e5ff;
+            overflow: hidden;
+            white-space: nowrap;
+            width: 0%;
+        }
+
+        .no-video {
+            text-align: center;
+            padding: 60px;
+        }
+
+        .no-video-icon {
+            font-size: 5rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .no-video h2 {
+            color: var(--text-muted);
+            font-weight: normal;
+        }
+
+        /* Lyrics Section (hidden by default when overlay is used) */
+        .lyrics-container {
+            background: linear-gradient(180deg, rgba(139, 92, 246, 0.1) 0%, var(--bg-dark) 100%);
+            padding: 30px;
+            min-height: 200px;
+            max-height: 30vh;
+            overflow-y: auto;
+        }
+
+        .video-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .video-container {
+            flex: 1;
+            min-height: 80vh;
+        }
+
+        .lyrics-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .lyrics-header h3 {
+            color: var(--accent);
+        }
+
+        .lyrics-content {
+            font-size: 1.8rem;
+            line-height: 2;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .lyrics-line {
+            opacity: 0.4;
+            transition: all 0.3s;
+            padding: 5px 0;
+        }
+
+        .lyrics-line.active {
+            opacity: 1;
+            color: var(--accent);
+            transform: scale(1.05);
+            text-shadow: 0 0 20px rgba(244, 114, 182, 0.5);
+        }
+
+        .lyrics-line.past {
+            opacity: 0.25;
+            transform: scale(0.95);
+        }
+
+        .lyrics-line.upcoming {
+            opacity: 0.5;
+        }
+
+        .lyrics-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 15px;
+            padding: 10px;
+            background: var(--bg-card);
+            border-radius: 10px;
+        }
+
+        .lyrics-controls label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .lyrics-controls input[type="range"] {
+            flex: 1;
+            max-width: 150px;
+        }
+
+        .offset-value {
+            font-family: monospace;
+            font-size: 0.85rem;
+            min-width: 50px;
+            text-align: center;
+        }
+
+        .lyrics-input-container {
+            margin-top: 20px;
+        }
+
+        .lyrics-textarea {
+            width: 100%;
+            height: 150px;
+            background: var(--bg-card);
+            border: 2px solid var(--bg-lighter);
+            border-radius: 12px;
+            padding: 15px;
+            color: var(--text);
+            font-size: 1rem;
+            resize: vertical;
+        }
+
+        .lyrics-textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: var(--bg-card);
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid var(--bg-lighter);
+        }
+
+        .add-song-section {
+            padding: 20px;
+            border-bottom: 1px solid var(--bg-lighter);
+        }
+
+        .add-song-section h3 {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .url-input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .url-input-group input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid var(--bg-lighter);
+            border-radius: 10px;
+            background: var(--bg-dark);
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+
+        .url-input-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .add-btn {
+            background: var(--primary);
+            border: none;
+            padding: 12px 20px;
+            border-radius: 10px;
+            color: white;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.3s;
+        }
+
+        .add-btn:hover {
+            background: var(--primary-dark);
+            transform: scale(1.05);
+        }
+
+        .url-input-group select {
+            padding: 12px 8px;
+            border: 2px solid var(--bg-lighter);
+            border-radius: 10px;
+            background: var(--bg-dark);
+            color: var(--text);
+            font-size: 0.85rem;
+            cursor: pointer;
+            min-width: 70px;
+        }
+
+        .url-input-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .title-input {
+            margin-top: 10px;
+            width: 100%;
+            padding: 10px 14px;
+            border: 2px solid var(--bg-lighter);
+            border-radius: 10px;
+            background: var(--bg-dark);
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+
+        /* Queue Section */
+        .queue-section {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .queue-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .queue-header h3 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .queue-count {
+            background: var(--primary);
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+        }
+
+        .queue-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .queue-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-lighter);
+            border-radius: 12px;
+            transition: all 0.3s;
+        }
+
+        .queue-item:hover {
+            background: rgba(139, 92, 246, 0.2);
+        }
+
+        .queue-number {
+            width: 28px;
+            height: 28px;
+            background: var(--bg-dark);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .queue-item-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .queue-item-title {
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .queue-item-user {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .queue-item-remove {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 5px;
+            transition: all 0.3s;
+            font-size: 1rem;
+        }
+
+        .queue-item-remove:hover {
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .queue-item-status {
+            display: flex;
+            gap: 4px;
+            margin-right: 8px;
+        }
+
+        .status-icon {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .status-icon.ready {
+            opacity: 1;
+        }
+
+        .status-icon.pending {
+            opacity: 0.4;
+        }
+
+        .status-icon.downloading {
+            animation: pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 0.4;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+
+        .empty-queue {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-queue-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+
+        /* Now Playing */
+        .now-playing {
+            padding: 15px 20px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border-bottom: 1px solid var(--bg-lighter);
+        }
+
+        .now-playing-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }
+
+        .now-playing-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .now-playing-user {
+            font-size: 0.85rem;
+            opacity: 0.8;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 10px;
+            padding: 15px 20px;
+            border-top: 1px solid var(--bg-lighter);
+        }
+
+        .control-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            background: var(--bg-lighter);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: all 0.3s;
+        }
+
+        .control-btn:hover {
+            background: var(--primary);
+        }
+
+        .control-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Notifications */
+        .notifications {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .notification {
+            background: var(--bg-card);
+            padding: 15px 20px;
+            border-radius: 12px;
+            border-left: 4px solid var(--primary);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            animation: slideIn 0.3s ease;
+        }
+
+        .notification-error {
+            background: rgba(220, 38, 38, 0.2);
+            border-left-color: #dc2626;
+            color: #fca5a5;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Users List */
+        .users-section {
+            padding: 15px 20px;
+            border-top: 1px solid var(--bg-lighter);
+        }
+
+        .users-section h4 {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+
+        .users-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .user-tag {
+            background: var(--bg-lighter);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+        }
+
+        .user-tag.host {
+            background: var(--primary);
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr 1fr;
+            }
+
+            .sidebar {
+                border-left: none;
+                border-top: 1px solid var(--bg-lighter);
+            }
+        }
+
+        /* Mobile phone - queue only mode */
+        @media (max-width: 600px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr;
+            }
+
+            .video-section {
+                display: none !important;
+            }
+
+            .sidebar {
+                border-left: none;
+                border-top: none;
+                height: 100%;
+                overflow-y: auto;
+            }
+
+            .app-container {
+                height: auto;
+                min-height: 100vh;
+            }
+
+            .header {
+                flex-wrap: wrap;
+                gap: 10px;
+                padding: 15px;
+            }
+
+            .room-info {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .queue-section {
+                max-height: none;
+            }
+
+            .add-song-section input {
+                font-size: 16px;
+                /* Prevent iOS zoom */
+            }
+
+            /* Show controls on mobile for everyone */
+            .controls {
+                display: flex !important;
+                justify-content: center;
+                gap: 15px;
+                padding: 15px;
+                background: rgba(0, 0, 0, 0.3);
+                border-radius: 10px;
+                margin: 10px 0;
+            }
+
+            .controls .control-btn {
+                font-size: 1.5rem;
+                padding: 12px 20px;
+            }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-dark);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-lighter);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--primary);
+        }
+
+        /* Loading animation */
+        .loading-dots {
+            display: inline-flex;
+            gap: 4px;
+        }
+
+        .loading-dots span {
+            width: 8px;
+            height: 8px;
+            background: var(--primary);
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out;
+        }
+
+        .loading-dots span:nth-child(1) {
+            animation-delay: -0.32s;
+        }
+
+        .loading-dots span:nth-child(2) {
+            animation-delay: -0.16s;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            80%,
+            100% {
+                transform: scale(0);
+            }
+
+            40% {
+                transform: scale(1);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Join Screen -->
+    <div class="join-screen" id="joinScreen">
+        <h1>🎤 Karaoke Party</h1>
+        <p>Sing together with friends online!</p>
+
+        <div class="join-form">
+            <div class="form-group">
+                <label>Your Name</label>
+                <input type="text" id="userName" placeholder="Enter your name" maxlength="20">
+            </div>
+
+            <div class="form-group">
+                <label>Room Code (leave empty to create new)</label>
+                <input type="text" id="roomCode" placeholder="Enter room code or leave blank">
+            </div>
+
+            <button class="btn btn-primary" id="hostBtn">🎤 Host a New Party</button>
+        </div>
+
+        <div id="activeRooms" style="margin-top: 30px; width: 100%; max-width: 400px; display: none;">
+            <h3 style="color: var(--text-muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">— or join an active room —</h3>
+            <div id="roomsList" style="display: flex; flex-direction: column; gap: 10px;"></div>
+        </div>
+    </div>
+
+    <!-- Main App Screen -->
+    <div class="app-screen" id="appScreen">
+        <header class="app-header">
+            <div class="room-info">
+                <span style="font-size: 1.2rem; font-weight: 600;">🎤 Karaoke Party</span>
+                <span class="room-id">Room: <span id="displayRoomId"></span></span>
+                <button class="copy-btn" id="copyRoomBtn">📋 Copy Link</button>
+            </div>
+            <div class="user-count">
+                <span>👥</span>
+                <span id="userCount">0</span> online
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Video & Lyrics Section -->
+            <div class="video-section">
+                <div class="video-container" id="videoContainer">
+                    <div class="no-video">
+                        <div class="no-video-icon">🎵</div>
+                        <h2>Waiting for songs...</h2>
+                        <p style="color: var(--text-muted); margin-top: 10px;">Add a YouTube URL to start the party!</p>
+                    </div>
+                    <!-- Karaoke lyrics overlay -->
+                    <div class="lyrics-overlay" id="lyricsOverlay"></div>
+                </div>
+
+                <div class="lyrics-container" style="display: none;">
+                    <div class="lyrics-header">
+                        <h3>📝 Lyrics</h3>
+                        <button class="copy-btn" id="toggleLyricsInput">Manual</button>
+                    </div>
+                    <div class="lyrics-content" id="lyricsDisplay">
+                        <p style="color: var(--text-muted); font-size: 1rem;">Lyrics will load automatically when a song
+                            plays</p>
+                    </div>
+                    <div class="lyrics-controls">
+                        <label>⏱️ Sync:</label>
+                        <input type="range" id="lyricsOffset" min="-30" max="30" value="0" step="1">
+                        <span class="offset-value" id="offsetValue">0s</span>
+                        <button class="copy-btn" id="resetOffset"
+                            style="padding: 4px 10px; font-size: 0.8rem;">Reset</button>
+                    </div>
+                    <div class="lyrics-input-container" id="lyricsInputContainer" style="display: none;">
+                        <textarea class="lyrics-textarea" id="lyricsInput"
+                            placeholder="Paste song lyrics here... (one line per line)"></textarea>
+                        <button class="btn btn-primary" style="margin-top: 10px; width: auto; padding: 10px 20px;"
+                            id="saveLyrics">Apply Lyrics</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <!-- Now Playing -->
+                <div class="now-playing" id="nowPlaying" style="display: none;">
+                    <div class="now-playing-label">♪ Now Playing</div>
+                    <div class="now-playing-title" id="nowPlayingTitle">-</div>
+                    <div class="now-playing-user" id="nowPlayingUser">-</div>
+                </div>
+
+                <!-- Add Song -->
+                <div class="add-song-section">
+                    <h3>➕ Add Song</h3>
+                    <div class="url-input-group">
+                        <input type="text" id="songUrl" placeholder="Paste YouTube URL...">
+                        <select id="songLanguage" title="Language hint for lyrics">
+                            <option value="">Auto</option>
+                            <option value="ja">日本語</option>
+                            <option value="ko">한국어</option>
+                            <option value="zh">中文</option>
+                            <option value="en">English</option>
+                            <option value="es">Español</option>
+                        </select>
+                        <button class="add-btn" id="addSongBtn">+</button>
+                    </div>
+                </div>
+
+                <!-- Queue -->
+                <div class="queue-section">
+                    <div class="queue-header">
+                        <h3>📋 Queue <span class="queue-count" id="queueCount">0</span></h3>
+                    </div>
+                    <div class="queue-list" id="queueList">
+                        <div class="empty-queue">
+                            <div class="empty-queue-icon">🎶</div>
+                            <p>Queue is empty</p>
+                            <p style="font-size: 0.85rem; margin-top: 5px;">Add songs to get started!</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controls (Host Only) -->
+                <div class="controls" id="hostControls" style="display: none;">
+                    <button class="control-btn" id="skipBtn" title="Skip Song">⏭️</button>
+                    <button class="control-btn" id="playPauseBtn" title="Play/Pause">⏸️</button>
+                </div>
+
+                <!-- Users -->
+                <div class="users-section">
+                    <h4>👥 Connected Users</h4>
+                    <div class="users-list" id="usersList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notifications Container -->
+    <div class="notifications" id="notifications"></div>
+
+    <!-- Socket.io -->
+    <script src="/socket.io/socket.io.js"></script>
+
+    <!-- App Script -->
+    <script src="app.js"></script>
+</body>
+
+</html>

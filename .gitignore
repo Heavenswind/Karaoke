@@ -1,0 +1,8 @@
+node_modules/
+videos/
+.claude/
+*.mp3
+*.mp4
+*.json
+!package.json
+!package-lock.json
