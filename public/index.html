@@ -4,124 +4,314 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎤 Karaoke Party</title>
+    <meta name="theme-color" content="#0b0a12">
+    <title>Karaoke Party</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎤</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500;700;800&family=Noto+Sans+JP:wght@700;900&display=swap"
+        rel="stylesheet">
     <style>
+        /* ── Tokens ─────────────────────────────────────────────────────────
+           A karaoke box at midnight: deep violet room, three neon tubes with
+           strict jobs — pink (brand/actions), amber (queue/status), and cyan
+           reserved exclusively for sung lyrics. */
+        :root {
+            --void: #0b0a12;
+            --velvet: #17142a;
+            --velvet-2: #201b3a;
+            --velvet-3: #2f2853;
+            --text: #f4f2ff;
+            --text-muted: #9b94b8;
+            --pink: #ff4d8d;
+            --pink-deep: #d92e6f;
+            --amber: #ffc24b;
+            --cyan: #23e6ff;
+            --danger: #ff5c5c;
+            --radius-s: 10px;
+            --radius-m: 14px;
+            --radius-l: 22px;
+            --font-display: 'Bungee', 'Rubik', sans-serif;
+            --font-ui: 'Rubik', 'Noto Sans JP', 'Segoe UI', system-ui, sans-serif;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
-        :root {
-            --primary: #8b5cf6;
-            --primary-dark: #7c3aed;
-            --bg-dark: #0f0f1a;
-            --bg-card: #1a1a2e;
-            --bg-lighter: #252542;
-            --text: #ffffff;
-            --text-muted: #a0a0b0;
-            --accent: #f472b6;
-            --success: #10b981;
-            --warning: #f59e0b;
+        html,
+        body {
+            height: 100%;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a0a2e 100%);
+            font-family: var(--font-ui);
+            background: var(--void);
             color: var(--text);
             min-height: 100vh;
             overflow-x: hidden;
         }
 
-        /* Join Screen */
+        button {
+            font-family: inherit;
+        }
+
+        :focus-visible {
+            outline: 2px solid var(--pink);
+            outline-offset: 2px;
+            border-radius: 4px;
+        }
+
+        ::selection {
+            background: var(--pink-deep);
+            color: #fff;
+        }
+
+        /* ── Join screen ──────────────────────────────────────────────── */
         .join-screen {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             min-height: 100vh;
-            padding: 20px;
-            background: radial-gradient(circle at center, #2a1a4a 0%, var(--bg-dark) 70%);
+            padding: 40px 20px 60px;
+            background:
+                radial-gradient(60% 45% at 50% 0%, #2b1747 0%, transparent 70%),
+                radial-gradient(45% 35% at 12% 100%, #190f31 0%, transparent 75%),
+                var(--void);
         }
 
-        .join-screen h1 {
-            font-size: 3rem;
-            margin-bottom: 10px;
-            background: linear-gradient(135deg, var(--primary), var(--accent));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        .neon-sign {
+            font-family: var(--font-display);
+            text-align: center;
+            line-height: 1.05;
+            user-select: none;
         }
 
-        .join-screen p {
+        .neon-word {
+            display: block;
+            font-size: clamp(2.6rem, 8.5vw, 5.2rem);
+            color: #ffe3ee;
+            letter-spacing: 0.04em;
+            text-shadow:
+                0 0 4px rgba(255, 255, 255, 0.35),
+                0 0 12px var(--pink),
+                0 0 28px var(--pink),
+                0 0 60px rgba(255, 77, 141, 0.75),
+                0 0 110px rgba(255, 77, 141, 0.45);
+        }
+
+        .neon-sub {
+            display: block;
+            margin-top: 8px;
+            font-size: clamp(1.1rem, 3.4vw, 1.9rem);
+            color: #fff3dc;
+            letter-spacing: 0.55em;
+            margin-right: -0.55em; /* re-center the tracked-out text */
+            text-shadow:
+                0 0 4px rgba(255, 255, 255, 0.3),
+                0 0 10px var(--amber),
+                0 0 24px var(--amber),
+                0 0 52px rgba(255, 194, 75, 0.55);
+        }
+
+        /* The one broken tube letter — a real neon sign always has one */
+        .flicker {
+            animation: tube-flicker 7s infinite;
+        }
+
+        @keyframes tube-flicker {
+            0%, 40%, 43.5%, 45.5%, 80%, 82.5%, 100% { opacity: 1; }
+            41%, 44.5% { opacity: 0.35; text-shadow: none; }
+            81% { opacity: 0.5; }
+        }
+
+        .tagline {
             color: var(--text-muted);
-            margin-bottom: 40px;
+            margin: 22px 0 38px;
+            font-size: 1.02rem;
         }
 
         .join-form {
-            background: var(--bg-card);
-            padding: 40px;
-            border-radius: 20px;
+            background: var(--velvet);
+            border: 1px solid var(--velvet-3);
+            padding: 34px;
+            border-radius: var(--radius-l);
             width: 100%;
-            max-width: 400px;
-            box-shadow: 0 20px 60px rgba(139, 92, 246, 0.2);
+            max-width: 420px;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 18px;
         }
 
         .form-group label {
             display: block;
             margin-bottom: 8px;
             color: var(--text-muted);
-            font-size: 0.9rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
         .form-group input {
             width: 100%;
-            padding: 14px 18px;
-            border: 2px solid var(--bg-lighter);
-            border-radius: 12px;
-            background: var(--bg-dark);
+            padding: 14px 16px;
+            border: 1px solid var(--velvet-3);
+            border-radius: var(--radius-s);
+            background: var(--void);
             color: var(--text);
             font-size: 1rem;
-            transition: border-color 0.3s;
+            font-family: inherit;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-group input::placeholder {
+            color: #5f5880;
         }
 
         .form-group input:focus {
             outline: none;
-            border-color: var(--primary);
+            border-color: var(--pink);
+            box-shadow: 0 0 0 3px rgba(255, 77, 141, 0.18);
+        }
+
+        #roomCode {
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-weight: 500;
         }
 
         .btn {
             width: 100%;
-            padding: 16px 24px;
+            padding: 15px 24px;
             border: none;
-            border-radius: 12px;
+            border-radius: var(--radius-s);
             font-size: 1rem;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: transform 0.15s, box-shadow 0.2s, filter 0.2s;
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, var(--primary), var(--accent));
-            color: white;
+            background: linear-gradient(135deg, var(--pink), var(--pink-deep));
+            color: #fff;
+            box-shadow: 0 6px 24px rgba(255, 77, 141, 0.25);
         }
 
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(139, 92, 246, 0.4);
+            transform: translateY(-1px);
+            box-shadow: 0 10px 34px rgba(255, 77, 141, 0.4);
+            filter: brightness(1.06);
         }
 
-        .btn-secondary {
-            background: var(--bg-lighter);
-            color: var(--text);
-            margin-top: 10px;
+        .btn-primary:active {
+            transform: translateY(0);
         }
 
-        /* Main App */
+        /* Active rooms on this network */
+        .active-rooms {
+            margin-top: 34px;
+            width: 100%;
+            max-width: 420px;
+        }
+
+        .active-rooms h3 {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            text-align: center;
+            margin-bottom: 14px;
+        }
+
+        .rooms-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .room-card {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            background: var(--velvet);
+            border: 1px solid var(--velvet-3);
+            border-radius: var(--radius-m);
+            padding: 14px 16px;
+            cursor: pointer;
+            transition: border-color 0.2s, transform 0.15s;
+        }
+
+        .room-card:hover {
+            border-color: var(--pink);
+            transform: translateY(-1px);
+        }
+
+        .room-card-icon {
+            font-size: 1.6rem;
+        }
+
+        .room-card-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .room-card-top {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            margin-bottom: 3px;
+        }
+
+        .room-card-code {
+            font-family: var(--font-display);
+            font-size: 0.95rem;
+            color: var(--amber);
+            letter-spacing: 0.08em;
+        }
+
+        .room-card-count {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        .room-card-song {
+            font-size: 0.88rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .room-card-song.idle {
+            color: var(--text-muted);
+        }
+
+        .room-delete {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.3rem;
+            line-height: 1;
+            cursor: pointer;
+            padding: 6px 10px;
+            border-radius: var(--radius-s);
+            transition: color 0.2s, background 0.2s;
+        }
+
+        .room-delete:hover {
+            color: var(--danger);
+            background: rgba(255, 92, 92, 0.12);
+        }
+
+        /* ── App shell ───────────────────────────────────────────────────── */
         .app-screen {
             display: none;
             height: 100vh;
@@ -130,59 +320,91 @@
 
         .app-header {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            padding: 15px 30px;
-            background: var(--bg-card);
-            border-bottom: 1px solid var(--bg-lighter);
+            gap: 18px;
+            height: 62px;
+            padding: 0 22px;
+            background: var(--velvet);
+            border-bottom: 1px solid var(--velvet-3);
         }
 
-        .room-info {
+        .brand {
+            font-family: var(--font-display);
+            font-size: 1rem;
+            color: #ffe3ee;
+            text-shadow: 0 0 8px rgba(255, 77, 141, 0.9), 0 0 22px rgba(255, 77, 141, 0.5);
+            white-space: nowrap;
+        }
+
+        .brand span {
+            color: #fff3dc;
+            text-shadow: 0 0 8px rgba(255, 194, 75, 0.9), 0 0 22px rgba(255, 194, 75, 0.45);
+            margin-left: 7px;
+        }
+
+        .room-chip {
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 9px;
+            background: var(--velvet-2);
+            border: 1px solid var(--velvet-3);
+            border-radius: 999px;
+            padding: 7px 15px;
+            color: var(--text);
+            cursor: pointer;
+            transition: border-color 0.2s;
         }
 
-        .room-id {
-            background: var(--bg-lighter);
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-family: monospace;
-            font-size: 0.9rem;
+        .room-chip:hover {
+            border-color: var(--amber);
         }
 
-        .user-count {
+        .room-chip-label {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .room-chip-code {
+            font-family: var(--font-display);
+            font-size: 0.88rem;
+            color: var(--amber);
+            letter-spacing: 0.08em;
+        }
+
+        .room-chip svg {
+            width: 13px;
+            height: 13px;
+            fill: var(--text-muted);
+        }
+
+        .mic-count {
+            margin-left: auto;
             display: flex;
             align-items: center;
             gap: 8px;
             color: var(--text-muted);
+            font-size: 0.9rem;
         }
 
-        .copy-btn {
-            background: var(--primary);
-            border: none;
-            padding: 8px 16px;
-            border-radius: 8px;
-            color: white;
-            cursor: pointer;
-            font-size: 0.85rem;
+        .mic-count b {
+            color: var(--text);
         }
 
         .main-content {
             display: grid;
-            grid-template-columns: 1fr 380px;
-            gap: 0;
-            height: calc(100vh - 70px);
+            grid-template-columns: 1fr 400px;
+            height: calc(100vh - 62px);
         }
 
-        /* Video Section */
+        /* ── Stage (video) ───────────────────────────────────────────────── */
         .video-section {
-            flex: 1;
             display: flex;
             flex-direction: column;
-            background: #000;
             position: relative;
             min-height: 0;
+            min-width: 0;
         }
 
         .video-container {
@@ -191,33 +413,101 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(180deg, #1a0a2e 0%, #0f0f1a 100%);
+            background:
+                radial-gradient(70% 60% at 50% 0%, #221340 0%, transparent 70%),
+                var(--void);
             position: relative;
             overflow: hidden;
         }
 
-        .video-container video,
-        .video-container iframe {
+        .video-container video {
             width: 100%;
             height: 100%;
-            max-height: 100%;
             object-fit: contain;
+            background: #000;
+            display: block;
         }
 
-        /* Karaoke Lyrics Overlay */
+        .empty-stage {
+            text-align: center;
+            padding: 60px;
+        }
+
+        .empty-stage-mic {
+            font-size: 4.2rem;
+            margin-bottom: 22px;
+            filter: drop-shadow(0 0 26px rgba(255, 77, 141, 0.55));
+        }
+
+        .empty-stage h2 {
+            font-weight: 700;
+            font-size: 1.5rem;
+            margin-bottom: 8px;
+        }
+
+        .empty-stage p {
+            color: var(--text-muted);
+        }
+
+        .video-loading {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .video-loading p {
+            margin-top: 16px;
+            font-weight: 500;
+        }
+
+        .video-loading-sub {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 400 !important;
+            margin-top: 8px !important;
+        }
+
+        .tap-to-start {
+            position: absolute;
+            inset: 0;
+            margin: auto;
+            width: fit-content;
+            height: fit-content;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(11, 10, 18, 0.82);
+            border: 1px solid var(--pink);
+            color: var(--text);
+            font-size: 1.05rem;
+            font-weight: 700;
+            padding: 16px 28px;
+            border-radius: 999px;
+            cursor: pointer;
+            z-index: 120;
+            box-shadow: 0 0 40px rgba(255, 77, 141, 0.35);
+        }
+
+        .tap-to-start svg {
+            width: 18px;
+            height: 18px;
+            fill: var(--pink);
+        }
+
+        /* ── Karaoke overlay ─────────────────────────────────────────────── */
         .lyrics-overlay {
             position: absolute;
-            bottom: 80px;
+            bottom: 74px;
             left: 50%;
             transform: translateX(-50%);
-            width: 90%;
-            max-width: 900px;
+            width: min(92%, 980px);
             text-align: center;
             z-index: 100;
             pointer-events: none;
-            padding: 20px;
-            background: rgba(0, 0, 0, 0.5);
-            border-radius: 12px;
+            padding: 18px 26px;
+            background: rgba(8, 6, 16, 0.48);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            border-radius: 18px;
         }
 
         .lyrics-overlay:empty {
@@ -225,55 +515,27 @@
         }
 
         .karaoke-line {
-            font-size: 2.5rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin: 8px 0;
-            color: white;
+            font-weight: 800;
+            margin: 6px 0;
+            color: #fff;
             text-shadow:
-                0 0 10px rgba(0, 0, 0, 0.8),
-                0 0 20px rgba(0, 0, 0, 0.6),
+                0 0 10px rgba(0, 0, 0, 0.85),
                 2px 2px 4px rgba(0, 0, 0, 0.9);
-            position: relative;
-            display: inline-block;
             width: 100%;
         }
 
         .karaoke-line.current {
-            font-size: 3rem;
+            font-size: clamp(1.8rem, 4.2vw, 3rem);
+            line-height: 1.9; /* room for furigana above kanji */
         }
 
         .karaoke-line.next {
-            font-size: 1.8rem;
-            opacity: 0.6;
+            font-size: clamp(1rem, 2vw, 1.5rem);
+            opacity: 0.55;
+            font-weight: 700;
         }
 
-        /* Karaoke fill effect - word by word */
-        .karaoke-text {
-            position: relative;
-            display: inline-block;
-        }
-
-        .karaoke-text .text-bg {
-            color: rgba(255, 255, 255, 0.3);
-        }
-
-        .karaoke-text .text-fill {
-            position: absolute;
-            top: 0;
-            left: 0;
-            color: #00e5ff;
-            overflow: hidden;
-            white-space: nowrap;
-            width: 0%;
-        }
-
-        .karaoke-text.sung .text-fill {
-            width: 100%;
-        }
-
-        /* Word-level karaoke */
+        /* Word-by-word fill — cyan is used here and nowhere else */
         .karaoke-word {
             position: relative;
             display: inline-block;
@@ -281,288 +543,335 @@
         }
 
         .karaoke-word .word-bg {
-            color: rgba(255, 255, 255, 0.3);
+            color: rgba(244, 242, 255, 0.34);
         }
 
-        .karaoke-word .word-fill {
+        .karaoke-word .word-fill,
+        .karaoke-text .text-fill {
             position: absolute;
             top: 0;
             left: 0;
-            color: #00e5ff;
+            color: var(--cyan);
+            text-shadow: 0 0 14px rgba(35, 230, 255, 0.5);
             overflow: hidden;
             white-space: nowrap;
             width: 0%;
         }
 
-        .no-video {
-            text-align: center;
-            padding: 60px;
+        .karaoke-text {
+            position: relative;
+            display: inline-block;
         }
 
-        .no-video-icon {
-            font-size: 5rem;
-            margin-bottom: 20px;
-            opacity: 0.5;
+        .karaoke-text .text-bg {
+            color: rgba(244, 242, 255, 0.34);
         }
 
-        .no-video h2 {
-            color: var(--text-muted);
-            font-weight: normal;
+        /* Furigana (readings over kanji) */
+        .karaoke-word ruby {
+            ruby-position: over;
+            ruby-align: center;
         }
 
-        /* Lyrics Section (hidden by default when overlay is used) */
-        .lyrics-container {
-            background: linear-gradient(180deg, rgba(139, 92, 246, 0.1) 0%, var(--bg-dark) 100%);
-            padding: 30px;
-            min-height: 200px;
-            max-height: 30vh;
-            overflow-y: auto;
+        .karaoke-word rt {
+            font-size: 0.42em;
+            font-weight: 700;
+            letter-spacing: 0;
+            color: inherit;
+            line-height: 1.1;
+            user-select: none;
         }
 
-        .lyrics-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .lyrics-header h3 {
-            color: var(--accent);
-        }
-
-        .lyrics-content {
-            font-size: 1.8rem;
-            line-height: 2;
-            text-align: center;
+        /* Intro / instrumental-break countdown */
+        .cd-label {
+            font-size: 0.8rem;
             font-weight: 500;
+            color: var(--amber);
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            margin-bottom: 8px;
         }
 
-        .lyrics-line {
-            opacity: 0.4;
-            transition: all 0.3s;
-            padding: 5px 0;
+        .cd-note {
+            font-size: 2rem;
+            color: rgba(244, 242, 255, 0.75);
+            animation: note-bob 2.2s ease-in-out infinite;
         }
 
-        .lyrics-line.active {
-            opacity: 1;
-            color: var(--accent);
-            transform: scale(1.05);
-            text-shadow: 0 0 20px rgba(244, 114, 182, 0.5);
+        @keyframes note-bob {
+            0%, 100% { transform: translateY(0); opacity: 0.65; }
+            50% { transform: translateY(-6px); opacity: 1; }
         }
 
-        .lyrics-line.past {
-            opacity: 0.25;
-            transform: scale(0.95);
-        }
-
-        .lyrics-line.upcoming {
-            opacity: 0.5;
-        }
-
-        .lyrics-controls {
+        .cd-dots {
             display: flex;
-            gap: 10px;
-            align-items: center;
-            margin-top: 15px;
-            padding: 10px;
-            background: var(--bg-card);
-            border-radius: 10px;
+            justify-content: center;
+            gap: 12px;
+            margin: 12px 0 10px;
         }
 
-        .lyrics-controls label {
-            font-size: 0.85rem;
-            color: var(--text-muted);
+        .cd-dots[hidden] {
+            display: none;
         }
 
-        .lyrics-controls input[type="range"] {
-            flex: 1;
-            max-width: 150px;
+        .cd-dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 194, 75, 0.4);
+            transition: background 0.2s, box-shadow 0.2s;
         }
 
-        .offset-value {
-            font-family: monospace;
-            font-size: 0.85rem;
-            min-width: 50px;
-            text-align: center;
+        .cd-dot.lit {
+            background: var(--amber);
+            border-color: var(--amber);
+            box-shadow: 0 0 12px rgba(255, 194, 75, 0.7);
         }
 
-        .lyrics-input-container {
-            margin-top: 20px;
-        }
-
-        .lyrics-textarea {
-            width: 100%;
-            height: 150px;
-            background: var(--bg-card);
-            border: 2px solid var(--bg-lighter);
-            border-radius: 12px;
-            padding: 15px;
-            color: var(--text);
-            font-size: 1rem;
-            resize: vertical;
-        }
-
-        .lyrics-textarea:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-
-        /* Sidebar */
+        /* ── Sidebar ─────────────────────────────────────────────────────── */
         .sidebar {
-            background: var(--bg-card);
+            background: var(--velvet);
             display: flex;
             flex-direction: column;
-            border-left: 1px solid var(--bg-lighter);
+            border-left: 1px solid var(--velvet-3);
+            min-height: 0;
+        }
+
+        .now-playing {
+            padding: 16px 20px;
+            background-color: var(--velvet-2);
+            background-size: cover;
+            background-position: center;
+            border-bottom: 1px solid var(--velvet-3);
+        }
+
+        .now-playing-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.72rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            color: var(--amber);
+            margin-bottom: 6px;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--pink);
+            box-shadow: 0 0 10px var(--pink);
+            animation: live-pulse 1.6s ease-in-out infinite;
+        }
+
+        @keyframes live-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.45; }
+        }
+
+        .now-playing-title {
+            font-weight: 700;
+            font-size: 1.05rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+        }
+
+        .now-playing-user {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
         }
 
         .add-song-section {
-            padding: 20px;
-            border-bottom: 1px solid var(--bg-lighter);
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--velvet-3);
+        }
+
+        .add-song-section h3,
+        .queue-header h3 {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--text-muted);
         }
 
         .add-song-section h3 {
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            margin-bottom: 12px;
         }
 
         .url-input-group {
             display: flex;
-            gap: 10px;
+            gap: 8px;
         }
 
         .url-input-group input {
             flex: 1;
-            padding: 12px 16px;
-            border: 2px solid var(--bg-lighter);
-            border-radius: 10px;
-            background: var(--bg-dark);
+            min-width: 0;
+            padding: 11px 14px;
+            border: 1px solid var(--velvet-3);
+            border-radius: var(--radius-s);
+            background: var(--void);
             color: var(--text);
             font-size: 0.9rem;
+            font-family: inherit;
         }
 
-        .url-input-group input:focus {
+        .url-input-group input::placeholder {
+            color: #5f5880;
+        }
+
+        .url-input-group input:focus,
+        .url-input-group select:focus {
             outline: none;
-            border-color: var(--primary);
-        }
-
-        .add-btn {
-            background: var(--primary);
-            border: none;
-            padding: 12px 20px;
-            border-radius: 10px;
-            color: white;
-            cursor: pointer;
-            font-size: 1.2rem;
-            transition: all 0.3s;
-        }
-
-        .add-btn:hover {
-            background: var(--primary-dark);
-            transform: scale(1.05);
+            border-color: var(--pink);
+            box-shadow: 0 0 0 3px rgba(255, 77, 141, 0.18);
         }
 
         .url-input-group select {
-            padding: 12px 8px;
-            border: 2px solid var(--bg-lighter);
-            border-radius: 10px;
-            background: var(--bg-dark);
-            color: var(--text);
-            font-size: 0.85rem;
+            padding: 11px 6px;
+            border: 1px solid var(--velvet-3);
+            border-radius: var(--radius-s);
+            background: var(--void);
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            font-family: inherit;
             cursor: pointer;
-            min-width: 70px;
         }
 
-        .url-input-group select:focus {
-            outline: none;
-            border-color: var(--primary);
+        .add-btn {
+            background: linear-gradient(135deg, var(--pink), var(--pink-deep));
+            border: none;
+            width: 42px;
+            border-radius: var(--radius-s);
+            color: white;
+            cursor: pointer;
+            font-size: 1.3rem;
+            line-height: 1;
+            transition: filter 0.2s, transform 0.15s;
         }
 
-        .title-input {
-            margin-top: 10px;
-            width: 100%;
-            padding: 10px 14px;
-            border: 2px solid var(--bg-lighter);
-            border-radius: 10px;
-            background: var(--bg-dark);
-            color: var(--text);
-            font-size: 0.9rem;
+        .add-btn:hover {
+            filter: brightness(1.1);
+            transform: scale(1.04);
         }
 
-        /* Queue Section */
+        .add-hint {
+            margin-top: 9px;
+            font-size: 0.76rem;
+            color: var(--text-muted);
+        }
+
+        /* Queue */
         .queue-section {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
+            padding: 18px 20px;
+            min-height: 0;
         }
 
         .queue-header {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        .queue-header h3 {
-            display: flex;
             align-items: center;
             gap: 10px;
+            margin-bottom: 12px;
         }
 
         .queue-count {
-            background: var(--primary);
-            padding: 2px 10px;
-            border-radius: 20px;
-            font-size: 0.8rem;
+            background: var(--velvet-2);
+            border: 1px solid var(--velvet-3);
+            color: var(--amber);
+            padding: 1px 9px;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 700;
         }
 
         .queue-list {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
         }
 
         .queue-item {
             display: flex;
             align-items: center;
             gap: 12px;
-            padding: 12px;
-            background: var(--bg-lighter);
-            border-radius: 12px;
-            transition: all 0.3s;
+            padding: 8px;
+            background: var(--velvet-2);
+            border: 1px solid transparent;
+            border-radius: var(--radius-m);
+            transition: border-color 0.2s, transform 0.15s;
         }
 
         .queue-item:hover {
-            background: rgba(139, 92, 246, 0.2);
+            border-color: var(--velvet-3);
+            transform: translateY(-1px);
         }
 
-        .queue-number {
-            width: 28px;
-            height: 28px;
-            background: var(--bg-dark);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8rem;
-            font-weight: 600;
+        .queue-thumb {
+            position: relative;
+            width: 68px;
+            height: 44px;
+            flex-shrink: 0;
+            border-radius: 8px;
+            background-color: var(--void);
+            background-size: cover;
+            background-position: center;
+            overflow: hidden;
+        }
+
+        .queue-pos {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            min-width: 18px;
+            padding: 1px 5px;
+            background: rgba(11, 10, 18, 0.85);
+            border-top-right-radius: 7px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--amber);
+            text-align: center;
         }
 
         .queue-item-info {
             flex: 1;
-            overflow: hidden;
+            min-width: 0;
         }
 
         .queue-item-title {
             font-weight: 500;
+            font-size: 0.88rem;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
 
-        .queue-item-user {
-            font-size: 0.8rem;
+        .queue-item-meta {
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .q-status {
+            color: var(--text-muted);
+        }
+
+        .q-status.prep {
+            color: var(--amber);
+            animation: live-pulse 1.4s ease-in-out infinite;
+        }
+
+        .q-status.ready {
             color: var(--text-muted);
         }
 
@@ -571,153 +880,171 @@
             border: none;
             color: var(--text-muted);
             cursor: pointer;
-            padding: 5px;
-            border-radius: 5px;
-            transition: all 0.3s;
-            font-size: 1rem;
+            font-size: 1.25rem;
+            line-height: 1;
+            padding: 6px 10px;
+            border-radius: var(--radius-s);
+            transition: color 0.2s, background 0.2s;
         }
 
         .queue-item-remove:hover {
-            color: #ef4444;
-            background: rgba(239, 68, 68, 0.1);
-        }
-
-        .queue-item-status {
-            display: flex;
-            gap: 4px;
-            margin-right: 8px;
-        }
-
-        .status-icon {
-            font-size: 0.9rem;
-            opacity: 0.8;
-        }
-
-        .status-icon.ready {
-            opacity: 1;
-        }
-
-        .status-icon.pending {
-            opacity: 0.4;
-        }
-
-        .status-icon.downloading {
-            animation: pulse 1s ease-in-out infinite;
-        }
-
-        @keyframes pulse {
-
-            0%,
-            100% {
-                opacity: 0.4;
-            }
-
-            50% {
-                opacity: 1;
-            }
+            color: var(--danger);
+            background: rgba(255, 92, 92, 0.12);
         }
 
         .empty-queue {
             text-align: center;
-            padding: 40px 20px;
+            padding: 36px 20px;
             color: var(--text-muted);
         }
 
         .empty-queue-icon {
-            font-size: 3rem;
-            margin-bottom: 15px;
-            opacity: 0.5;
+            font-size: 2.6rem;
+            margin-bottom: 12px;
+            opacity: 0.6;
         }
 
-        /* Now Playing */
-        .now-playing {
-            padding: 15px 20px;
-            background-color: var(--primary-dark);
-            background-size: cover;
-            background-position: center;
-            border-bottom: 1px solid var(--bg-lighter);
-            transition: background-image 0.4s ease;
+        .empty-queue-sub {
+            font-size: 0.82rem;
+            margin-top: 5px;
         }
 
-        .now-playing-label {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            opacity: 0.8;
-            margin-bottom: 5px;
-        }
-
-        .now-playing-title {
-            font-weight: 600;
-            font-size: 1.1rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .now-playing-user {
-            font-size: 0.85rem;
-            opacity: 0.8;
-        }
-
-        /* Controls */
+        /* Transport */
         .controls {
             display: flex;
+            align-items: center;
             gap: 10px;
-            padding: 15px 20px;
-            border-top: 1px solid var(--bg-lighter);
+            padding: 14px 20px;
+            border-top: 1px solid var(--velvet-3);
         }
 
         .control-btn {
-            flex: 1;
-            padding: 12px;
-            border: none;
-            border-radius: 10px;
-            background: var(--bg-lighter);
+            width: 46px;
+            height: 46px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--velvet-3);
+            border-radius: 50%;
+            background: var(--velvet-2);
             color: var(--text);
             cursor: pointer;
-            font-size: 1.1rem;
-            transition: all 0.3s;
+            transition: border-color 0.2s, background 0.2s, transform 0.15s;
+        }
+
+        .control-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
         }
 
         .control-btn:hover {
-            background: var(--primary);
+            border-color: var(--pink);
+            background: rgba(255, 77, 141, 0.14);
+            transform: scale(1.05);
         }
 
-        .control-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        .sync-group {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--velvet-2);
+            border: 1px solid var(--velvet-3);
+            border-radius: 999px;
+            padding: 3px;
         }
 
-        /* Notifications */
+        .sync-btn {
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 50%;
+            background: transparent;
+            color: var(--text);
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .sync-btn:hover {
+            background: var(--velvet-3);
+        }
+
+        .sync-value {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            min-width: 74px;
+            text-align: center;
+            user-select: none;
+        }
+
+        /* Singers */
+        .users-section {
+            padding: 14px 20px 18px;
+            border-top: 1px solid var(--velvet-3);
+        }
+
+        .users-section h4 {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+
+        .users-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+        }
+
+        .user-tag {
+            background: var(--velvet-2);
+            border: 1px solid var(--velvet-3);
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+        }
+
+        .user-tag.host {
+            border-color: var(--pink);
+            box-shadow: 0 0 12px rgba(255, 77, 141, 0.25);
+        }
+
+        /* ── Notifications ───────────────────────────────────────────────── */
         .notifications {
             position: fixed;
-            top: 80px;
+            top: 76px;
             right: 20px;
             z-index: 1000;
             display: flex;
             flex-direction: column;
             gap: 10px;
+            max-width: min(360px, calc(100vw - 40px));
         }
 
         .notification {
-            background: var(--bg-card);
-            padding: 15px 20px;
-            border-radius: 12px;
-            border-left: 4px solid var(--primary);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            background: var(--velvet);
+            border: 1px solid var(--velvet-3);
+            border-left: 3px solid var(--pink);
+            padding: 13px 18px;
+            border-radius: var(--radius-m);
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+            font-size: 0.9rem;
             animation: slideIn 0.3s ease;
+            overflow-wrap: break-word;
         }
 
         .notification-error {
-            background: rgba(220, 38, 38, 0.2);
-            border-left-color: #dc2626;
-            color: #fca5a5;
+            border-left-color: var(--danger);
+            color: #ffb4b4;
         }
 
         @keyframes slideIn {
             from {
-                transform: translateX(100%);
+                transform: translateX(60px);
                 opacity: 0;
             }
 
@@ -727,137 +1054,18 @@
             }
         }
 
-        /* Users List */
-        .users-section {
-            padding: 15px 20px;
-            border-top: 1px solid var(--bg-lighter);
-        }
-
-        .users-section h4 {
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            margin-bottom: 10px;
-        }
-
-        .users-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .user-tag {
-            background: var(--bg-lighter);
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-        }
-
-        .user-tag.host {
-            background: var(--primary);
-        }
-
-        /* Responsive */
-        @media (max-width: 900px) {
-            .main-content {
-                grid-template-columns: 1fr;
-                grid-template-rows: 1fr 1fr;
-            }
-
-            .sidebar {
-                border-left: none;
-                border-top: 1px solid var(--bg-lighter);
-            }
-        }
-
-        /* Mobile phone - queue only mode */
-        @media (max-width: 600px) {
-            .main-content {
-                grid-template-columns: 1fr;
-                grid-template-rows: 1fr;
-            }
-
-            .video-section {
-                display: none !important;
-            }
-
-            .sidebar {
-                border-left: none;
-                border-top: none;
-                height: 100%;
-                overflow-y: auto;
-            }
-
-            .app-container {
-                height: auto;
-                min-height: 100vh;
-            }
-
-            .header {
-                flex-wrap: wrap;
-                gap: 10px;
-                padding: 15px;
-            }
-
-            .room-info {
-                width: 100%;
-                justify-content: center;
-            }
-
-            .queue-section {
-                max-height: none;
-            }
-
-            .add-song-section input {
-                font-size: 16px;
-                /* Prevent iOS zoom */
-            }
-
-            /* Show controls on mobile for everyone */
-            .controls {
-                display: flex !important;
-                justify-content: center;
-                gap: 15px;
-                padding: 15px;
-                background: rgba(0, 0, 0, 0.3);
-                border-radius: 10px;
-                margin: 10px 0;
-            }
-
-            .controls .control-btn {
-                font-size: 1.5rem;
-                padding: 12px 20px;
-            }
-        }
-
-        /* Scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: var(--bg-dark);
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--bg-lighter);
-            border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--primary);
-        }
-
-        /* Loading animation */
+        /* ── Loading dots ────────────────────────────────────────────────── */
         .loading-dots {
             display: inline-flex;
-            gap: 4px;
+            gap: 5px;
         }
 
         .loading-dots span {
-            width: 8px;
-            height: 8px;
-            background: var(--primary);
+            width: 9px;
+            height: 9px;
+            background: var(--pink);
             border-radius: 50%;
+            box-shadow: 0 0 8px rgba(255, 77, 141, 0.6);
             animation: bounce 1.4s infinite ease-in-out;
         }
 
@@ -870,113 +1078,196 @@
         }
 
         @keyframes bounce {
-
-            0%,
-            80%,
-            100% {
-                transform: scale(0);
+            0%, 80%, 100% {
+                transform: scale(0.3);
+                opacity: 0.4;
             }
 
             40% {
                 transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        /* ── Scrollbar ───────────────────────────────────────────────────── */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--velvet-3);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--pink-deep);
+        }
+
+        /* ── Responsive ──────────────────────────────────────────────────── */
+        @media (max-width: 980px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                grid-template-rows: minmax(0, 1.1fr) minmax(0, 1fr);
+            }
+
+            .sidebar {
+                border-left: none;
+                border-top: 1px solid var(--velvet-3);
+            }
+        }
+
+        /* Phones act as remotes: no video, just queue + transport */
+        @media (max-width: 600px) {
+            .main-content {
+                grid-template-rows: 1fr;
+                height: calc(100vh - 62px);
+                height: calc(100dvh - 62px);
+            }
+
+            .video-section {
+                display: none !important;
+            }
+
+            .sidebar {
+                border-top: none;
+                overflow-y: auto;
+            }
+
+            .app-header {
+                gap: 10px;
+                padding: 0 14px;
+            }
+
+            .brand span {
+                display: none;
+            }
+
+            .mic-count span.label {
+                display: none;
+            }
+
+            .add-song-section input,
+            .add-song-section select {
+                font-size: 16px; /* prevent iOS zoom */
+            }
+
+            .controls {
+                justify-content: center;
+                gap: 18px;
+                padding: 16px;
+            }
+
+            .control-btn {
+                width: 58px;
+                height: 58px;
+            }
+
+            .control-btn svg {
+                width: 26px;
+                height: 26px;
+            }
+
+            .sync-group {
+                display: none; /* lyrics sync only matters where video plays */
+            }
+
+            .join-form {
+                padding: 26px 22px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .flicker,
+            .live-dot,
+            .cd-note,
+            .q-status.prep,
+            .loading-dots span {
+                animation: none;
+            }
+
+            * {
+                transition-duration: 0.01ms !important;
             }
         }
     </style>
 </head>
 
 <body>
-    <!-- Join Screen -->
+    <!-- Join screen -->
     <div class="join-screen" id="joinScreen">
-        <h1>🎤 Karaoke Party</h1>
-        <p>Sing together with friends online!</p>
+        <h1 class="neon-sign">
+            <span class="neon-word">KARA<span class="flicker">O</span>KE</span>
+            <span class="neon-sub">PARTY</span>
+        </h1>
+        <p class="tagline">Grab a mic. Queue a song. Sing your heart out.</p>
 
         <div class="join-form">
             <div class="form-group">
-                <label>Your Name</label>
-                <input type="text" id="userName" placeholder="Enter your name" maxlength="20">
+                <label for="userName">Your name</label>
+                <input type="text" id="userName" placeholder="Who's singing?" maxlength="20" autocomplete="off">
             </div>
 
             <div class="form-group">
-                <label>Room Code (leave empty to create new)</label>
-                <input type="text" id="roomCode" placeholder="Enter room code or leave blank">
+                <label for="roomCode">Room code</label>
+                <input type="text" id="roomCode" placeholder="Leave blank to start a new party" autocomplete="off">
             </div>
 
-            <button class="btn btn-primary" id="hostBtn">🎤 Host a New Party</button>
+            <button class="btn btn-primary" id="hostBtn">Start a party</button>
         </div>
 
-        <div id="activeRooms" style="margin-top: 30px; width: 100%; max-width: 400px; display: none;">
-            <h3 style="color: var(--text-muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">— or join an active room —</h3>
-            <div id="roomsList" style="display: flex; flex-direction: column; gap: 10px;"></div>
+        <div class="active-rooms" id="activeRooms" hidden>
+            <h3>Parties on this network</h3>
+            <div class="rooms-list" id="roomsList"></div>
         </div>
     </div>
 
-    <!-- Main App Screen -->
+    <!-- Main app -->
     <div class="app-screen" id="appScreen">
         <header class="app-header">
-            <div class="room-info">
-                <span style="font-size: 1.2rem; font-weight: 600;">🎤 Karaoke Party</span>
-                <span class="room-id">Room: <span id="displayRoomId"></span></span>
-                <button class="copy-btn" id="copyRoomBtn">📋 Copy Link</button>
-            </div>
-            <div class="user-count">
-                <span>👥</span>
-                <span id="userCount">0</span> online
+            <div class="brand">KARAOKE<span>PARTY</span></div>
+            <button class="room-chip" id="copyRoomBtn" title="Copy invite link">
+                <span class="room-chip-label">Room</span>
+                <span class="room-chip-code" id="displayRoomId"></span>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z" />
+                </svg>
+            </button>
+            <div class="mic-count">
+                <b id="userCount">0</b>
+                <span class="label">singers</span>
             </div>
         </header>
 
         <div class="main-content">
-            <!-- Video & Lyrics Section -->
+            <!-- Stage -->
             <div class="video-section">
                 <div class="video-container" id="videoContainer">
-                    <div class="no-video">
-                        <div class="no-video-icon">🎵</div>
-                        <h2>Waiting for songs...</h2>
-                        <p style="color: var(--text-muted); margin-top: 10px;">Add a YouTube URL to start the party!</p>
+                    <div class="empty-stage">
+                        <div class="empty-stage-mic">🎤</div>
+                        <h2>The stage is empty</h2>
+                        <p>Add a song and get this party started</p>
                     </div>
-                    <!-- Karaoke lyrics overlay -->
                     <div class="lyrics-overlay" id="lyricsOverlay"></div>
-                </div>
-
-                <div class="lyrics-container" style="display: none;">
-                    <div class="lyrics-header">
-                        <h3>📝 Lyrics</h3>
-                        <button class="copy-btn" id="toggleLyricsInput">Manual</button>
-                    </div>
-                    <div class="lyrics-content" id="lyricsDisplay">
-                        <p style="color: var(--text-muted); font-size: 1rem;">Lyrics will load automatically when a song
-                            plays</p>
-                    </div>
-                    <div class="lyrics-controls">
-                        <label>⏱️ Sync:</label>
-                        <input type="range" id="lyricsOffset" min="-30" max="30" value="0" step="1">
-                        <span class="offset-value" id="offsetValue">0s</span>
-                        <button class="copy-btn" id="resetOffset"
-                            style="padding: 4px 10px; font-size: 0.8rem;">Reset</button>
-                    </div>
-                    <div class="lyrics-input-container" id="lyricsInputContainer" style="display: none;">
-                        <textarea class="lyrics-textarea" id="lyricsInput"
-                            placeholder="Paste song lyrics here... (one line per line)"></textarea>
-                        <button class="btn btn-primary" style="margin-top: 10px; width: auto; padding: 10px 20px;"
-                            id="saveLyrics">Apply Lyrics</button>
-                    </div>
                 </div>
             </div>
 
             <!-- Sidebar -->
-            <div class="sidebar">
-                <!-- Now Playing -->
+            <aside class="sidebar">
                 <div class="now-playing" id="nowPlaying" style="display: none;">
-                    <div class="now-playing-label">♪ Now Playing</div>
-                    <div class="now-playing-title" id="nowPlayingTitle">-</div>
-                    <div class="now-playing-user" id="nowPlayingUser">-</div>
+                    <div class="now-playing-label"><span class="live-dot"></span> Now singing</div>
+                    <div class="now-playing-title" id="nowPlayingTitle">–</div>
+                    <div class="now-playing-user" id="nowPlayingUser">–</div>
                 </div>
 
-                <!-- Add Song -->
                 <div class="add-song-section">
-                    <h3>➕ Add Song</h3>
+                    <h3>Add a song</h3>
                     <div class="url-input-group">
-                        <input type="text" id="songUrl" placeholder="Paste YouTube URL...">
-                        <select id="songLanguage" title="Language hint for lyrics">
+                        <input type="text" id="songUrl" placeholder="YouTube link or song name" autocomplete="off">
+                        <select id="songLanguage" title="Lyrics language">
                             <option value="">Auto</option>
                             <option value="ja">日本語</option>
                             <option value="ko">한국어</option>
@@ -984,46 +1275,51 @@
                             <option value="en">English</option>
                             <option value="es">Español</option>
                         </select>
-                        <button class="add-btn" id="addSongBtn">+</button>
+                        <button class="add-btn" id="addSongBtn" aria-label="Add to queue">+</button>
                     </div>
+                    <p class="add-hint">Lyrics sync automatically — a song's first play takes a minute to prepare.</p>
                 </div>
 
-                <!-- Queue -->
                 <div class="queue-section">
                     <div class="queue-header">
-                        <h3>📋 Queue <span class="queue-count" id="queueCount">0</span></h3>
+                        <h3>Up next</h3>
+                        <span class="queue-count" id="queueCount">0</span>
                     </div>
                     <div class="queue-list" id="queueList">
                         <div class="empty-queue">
                             <div class="empty-queue-icon">🎶</div>
-                            <p>Queue is empty</p>
-                            <p style="font-size: 0.85rem; margin-top: 5px;">Add songs to get started!</p>
+                            <p>Nothing queued yet</p>
+                            <p class="empty-queue-sub">Drop in a YouTube link or type a song name above</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Controls (Host Only) -->
-                <div class="controls" id="hostControls" style="display: none;">
-                    <button class="control-btn" id="skipBtn" title="Skip Song">⏭️</button>
-                    <button class="control-btn" id="playPauseBtn" title="Play/Pause">⏸️</button>
+                <div class="controls" id="hostControls">
+                    <button class="control-btn" id="playPauseBtn" aria-label="Play or pause"></button>
+                    <button class="control-btn" id="skipBtn" aria-label="Skip song">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M6 18l8.5-6L6 6v12zM16 6h2v12h-2z" />
+                        </svg>
+                    </button>
+                    <div class="sync-group" title="Nudge lyrics timing if they run early or late">
+                        <button class="sync-btn" id="syncMinus" aria-label="Lyrics earlier">−</button>
+                        <span class="sync-value" id="syncValue">lyrics ±0.0s</span>
+                        <button class="sync-btn" id="syncPlus" aria-label="Lyrics later">+</button>
+                    </div>
                 </div>
 
-                <!-- Users -->
                 <div class="users-section">
-                    <h4>👥 Connected Users</h4>
+                    <h4>Singers</h4>
                     <div class="users-list" id="usersList"></div>
                 </div>
-            </div>
+            </aside>
         </div>
     </div>
 
-    <!-- Notifications Container -->
+    <!-- Notifications -->
     <div class="notifications" id="notifications"></div>
 
-    <!-- Socket.io -->
     <script src="/socket.io/socket.io.js"></script>
-
-    <!-- App Script -->
     <script src="app.js"></script>
 </body>
 

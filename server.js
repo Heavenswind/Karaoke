@@ -26,26 +26,85 @@ function isVideoReady(videoId) {
 function loadCachedTranscription(videoId) {
     const p = path.join(VIDEOS_DIR, `${videoId}.json`);
     if (!fs.existsSync(p)) return null;
-    try { return JSON.parse(fs.readFileSync(p, 'utf-8')); } catch { return null; }
+    try {
+        // strip a UTF-8 BOM - Windows editors add one when users hand-fix lyrics
+        let raw = fs.readFileSync(p, 'utf-8');
+        if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
+        return JSON.parse(raw);
+    } catch { return null; }
 }
 
-function deleteVideoFiles(videoId) {
-    for (const ext of ['.mp4', '.mp3', '.json']) {
+// Downloaded songs are kept as a cache (replays skip the whole pipeline).
+// Oldest songs are pruned when the cache grows past MAX_CACHE_MB.
+const MAX_CACHE_MB = parseInt(process.env.MAX_CACHE_MB || '8192', 10);
+
+function pruneCache(protectedIds = new Set()) {
+    let entries;
+    try {
+        entries = fs.readdirSync(VIDEOS_DIR)
+            .filter(f => f.endsWith('.mp4'))
+            .map(f => {
+                const id = f.slice(0, -4);
+                const files = ['.mp4', '.mp3', '.json']
+                    .map(ext => path.join(VIDEOS_DIR, id + ext))
+                    .filter(p => fs.existsSync(p));
+                return {
+                    id, files,
+                    size: files.reduce((n, p) => { try { return n + fs.statSync(p).size; } catch { return n; } }, 0),
+                    mtime: fs.statSync(path.join(VIDEOS_DIR, f)).mtimeMs
+                };
+            });
+    } catch { return; }
+
+    let total = entries.reduce((n, e) => n + e.size, 0);
+    const cap = MAX_CACHE_MB * 1024 * 1024;
+    for (const e of entries.sort((a, b) => a.mtime - b.mtime)) {
+        if (total <= cap) break;
+        if (protectedIds.has(e.id)) continue;
+        for (const p of e.files) { try { fs.unlinkSync(p); } catch {} }
+        total -= e.size;
+        console.log(`Cache pruned: ${e.id}`);
+    }
+}
+
+function touchVideoFiles(videoId) {
+    const now = new Date();
+    for (const ext of ['.mp4', '.json']) {
         const p = path.join(VIDEOS_DIR, `${videoId}${ext}`);
-        if (fs.existsSync(p)) try { fs.unlinkSync(p); } catch {}
+        try { fs.utimesSync(p, now, now); } catch {}
     }
 }
 
-function extractYouTubeId(url) {
-    const patterns = [
-        /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-        /youtube\.com\/shorts\/([^&\n?#]+)/
-    ];
-    for (const p of patterns) {
-        const m = url.match(p);
-        if (m) return m[1];
-    }
-    return null;
+const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+
+function extractYouTubeId(input) {
+    const text = (input || '').trim();
+    if (VIDEO_ID_RE.test(text)) return text; // raw video ID pasted directly
+    const m = text.match(/(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|embed\/|live\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+    return m ? m[1] : null;
+}
+
+// Resolve free-text input ("artist song name") to a video via yt-dlp search.
+function searchYouTube(query) {
+    return new Promise((resolve) => {
+        const proc = spawn('yt-dlp', ['--no-warnings', '--flat-playlist', '--dump-single-json', `ytsearch1:${query}`]);
+        let out = '';
+        let done = false;
+        const finish = (val) => { if (!done) { done = true; resolve(val); } };
+        const timer = setTimeout(() => { try { proc.kill(); } catch {} finish(null); }, 20000);
+        proc.stdout.on('data', d => out += d);
+        proc.on('error', () => { clearTimeout(timer); finish(null); });
+        proc.on('close', () => {
+            clearTimeout(timer);
+            try {
+                const entry = JSON.parse(out)?.entries?.[0];
+                if (entry && VIDEO_ID_RE.test(entry.id || '')) {
+                    return finish({ videoId: entry.id, title: entry.title || null });
+                }
+            } catch {}
+            finish(null);
+        });
+    });
 }
 
 function detectLanguageFromTitle(title) {
@@ -58,7 +117,10 @@ function detectLanguageFromTitle(title) {
 
 async function getVideoTitle(videoId) {
     try {
-        const res = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
+        const res = await fetch(
+            `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
+            { signal: AbortSignal.timeout(5000) }
+        );
         if (res.ok) { const d = await res.json(); return d.title || null; }
     } catch {}
     return null;
@@ -68,6 +130,7 @@ async function getVideoTitle(videoId) {
 // Runs one at a time — no concurrent GPU access
 
 let pipelineBusy = false;
+let pipelineVideoId = null; // which video is currently in the pipeline (for queue status)
 
 function runPipeline(videoId, languageHint, io, roomId) {
     return new Promise((resolve, reject) => {
@@ -119,11 +182,54 @@ async function prepareVideo(videoId, languageHint, io, roomId) {
     if (isVideoReady(videoId)) return { success: true, cached: true };
 
     pipelineBusy = true;
+    pipelineVideoId = videoId;
     try {
         const result = await runPipeline(videoId, languageHint, io, roomId);
         return result;
     } finally {
         pipelineBusy = false;
+        pipelineVideoId = null;
+        scheduleAheadPrep(); // GPU just freed up — see if there's more queue to warm
+    }
+}
+
+// Keeps the GPU busy for the whole queue, not just the next song: whenever
+// the pipeline frees up, this prepares the earliest not-yet-ready queued
+// song across every room (there's one shared GPU) and chains into the next
+// one. Without this, prep stopped after just the immediate next song was
+// ready and the GPU sat idle for the rest of a long song's playback.
+let aheadPrepScheduled = false;
+// Songs that already failed an ahead-of-queue prepare attempt this run — skip
+// them so a permanently-bad link doesn't get retried in a tight loop. The song
+// still gets one fresh, real attempt (and the usual drop-if-it-fails handling)
+// once it actually reaches the head of the queue in runPlayLoop.
+const aheadPrepFailed = new Set();
+
+function scheduleAheadPrep() {
+    if (aheadPrepScheduled || pipelineBusy) return;
+    aheadPrepScheduled = true;
+    setImmediate(runAheadPrep);
+}
+
+async function runAheadPrep() {
+    aheadPrepScheduled = false;
+    for (const [rid, room] of rooms) {
+        const target = room.queue.find(s => !isVideoReady(s.videoId) && !aheadPrepFailed.has(s.videoId));
+        if (!target) continue;
+        try {
+            const result = await prepareVideo(target.videoId, target.languageHint, null, null);
+            if (!result || (!result.success && !result.cached)) {
+                aheadPrepFailed.add(target.videoId);
+                console.error(`Pre-prepare failed for ${target.videoId}: ${result?.error || 'unknown error'}`);
+            } else {
+                const r = rooms.get(rid);
+                if (r) io.to(rid).emit('queue-updated', { queue: enrichQueue(r.queue) });
+            }
+        } catch (err) {
+            aheadPrepFailed.add(target.videoId);
+            console.error(`Pre-prepare failed for ${target.videoId}: ${err.message}`);
+        }
+        return; // prepareVideo's finally already chains the next one via scheduleAheadPrep
     }
 }
 
@@ -142,8 +248,19 @@ function enrichQueue(queue) {
     return queue.map(s => ({
         ...s,
         videoReady: isVideoReady(s.videoId),
-        lyricsReady: fs.existsSync(path.join(VIDEOS_DIR, `${s.videoId}.json`))
+        lyricsReady: fs.existsSync(path.join(VIDEOS_DIR, `${s.videoId}.json`)),
+        preparing: pipelineVideoId === s.videoId
     }));
+}
+
+// Every current song and queued song across all rooms — never prune these.
+function protectedVideoIds() {
+    const ids = new Set();
+    for (const room of rooms.values()) {
+        if (room.currentSong) ids.add(room.currentSong.videoId);
+        for (const s of room.queue) ids.add(s.videoId);
+    }
+    return ids;
 }
 
 // ─── Play Loop ───────────────────────────────────────────────────────────────
@@ -181,31 +298,25 @@ async function runPlayLoop(roomId) {
             // Shift it out and set as current
             roomNow.queue.shift();
             roomNow.currentSong = song;
+            roomNow.currentSongStartedAt = Date.now();
+            touchVideoFiles(song.videoId); // mark as recently used for cache pruning
 
             io.to(roomId).emit('play-song', { song });
             io.to(roomId).emit('queue-updated', { queue: enrichQueue(roomNow.queue) });
 
             console.log(`Now playing: ${song.title}`);
 
-            // Pre-prepare next song in background while current one plays
-            const nextSong = roomNow.queue[0];
-            if (nextSong && !isVideoReady(nextSong.videoId)) {
-                prepareVideo(nextSong.videoId, nextSong.languageHint, null, null)
-                    .then(() => {
-                        const r = rooms.get(roomId);
-                        if (r) io.to(roomId).emit('queue-updated', { queue: enrichQueue(r.queue) });
-                    })
-                    .catch(err => console.error(`Pre-prepare failed for ${nextSong.videoId}: ${err.message}`));
-            }
+            // Warm the rest of the queue in the background while this one plays
+            scheduleAheadPrep();
 
-            // Wait for song to end (host emits 'song-ended' or 'skip-song')
+            // Wait for song to end (any client emits 'song-ended', or 'skip-song')
             await waitForSongEnd(roomId, song.id);
-
-            // Clean up files
-            deleteVideoFiles(song.videoId);
 
             const roomAfter = rooms.get(roomId);
             if (roomAfter) roomAfter.currentSong = null;
+
+            // Keep files cached for replays; trim oldest songs past the cap
+            pruneCache(protectedVideoIds());
         }
     } finally {
         activeLoops.delete(roomId);
@@ -226,9 +337,11 @@ function waitForSongEnd(roomId, songId) {
     });
 }
 
-function signalSongEnd(roomId) {
+// songId guards against a stale 'song-ended' (from a previous song) killing the
+// song that just started. Pass null to end whatever is playing (skip, room close).
+function signalSongEnd(roomId, songId = null) {
     const cb = songEndCallbacks.get(roomId);
-    if (cb) {
+    if (cb && (!songId || cb.songId === songId)) {
         songEndCallbacks.delete(roomId);
         cb.resolve();
     }
@@ -245,7 +358,8 @@ app.get('/api/video/prepare/:videoId', async (req, res) => {
             videoUrl: `/videos/${videoId}.mp4`,
             segments: cached?.segments || [],
             lyrics: cached?.text || '',
-            language: cached?.language || 'unknown'
+            language: cached?.language || 'unknown',
+            duration: cached?.duration || null
         });
     }
     return res.json({ success: false, error: 'Video not ready yet' });
@@ -259,13 +373,15 @@ app.get('/api/video/status/:videoId', (req, res) => {
 
 app.get('/api/rooms', (req, res) => {
     const list = [];
+    const canDelete = isLocalRequest(req);
     for (const [id, room] of rooms) {
         if (room.users.size > 0) {
             list.push({
                 id,
                 userCount: room.users.size,
                 currentSong: room.currentSong ? room.currentSong.title : null,
-                queueLength: room.queue.length
+                queueLength: room.queue.length,
+                canDelete
             });
         }
     }
@@ -336,6 +452,8 @@ io.on('connection', (socket) => {
         const room = getRoom(roomId);
 
         if (!room.hostId || isHost) room.hostId = socket.id;
+        // keep exactly one crown — a reclaimed host demotes the migrated one
+        for (const [id, u] of room.users) u.isHost = id === room.hostId;
         room.users.set(socket.id, { name: userName, isHost: socket.id === room.hostId });
 
         socket.emit('room-state', {
@@ -356,10 +474,27 @@ io.on('connection', (socket) => {
     socket.on('add-song', async ({ url, languageHint: clientLangHint }) => {
         if (!currentRoom) return socket.emit('error', { message: 'Not in a room' });
 
-        const videoId = extractYouTubeId(url);
-        if (!videoId) return socket.emit('error', { message: 'Invalid YouTube URL' });
+        const input = (url || '').trim();
+        if (!input) return;
 
-        const title = await getVideoTitle(videoId) || `Song by ${userName}`;
+        let videoId = extractYouTubeId(input);
+        let title = null;
+
+        if (!videoId) {
+            // Not a YouTube link — treat it as a song search
+            if (/^https?:\/\//i.test(input)) {
+                return socket.emit('error', { message: "That link doesn't look like a YouTube video" });
+            }
+            socket.emit('notification', { message: `Searching YouTube for "${input}"...` });
+            const found = await searchYouTube(input);
+            if (!found) return socket.emit('error', { message: `No results for "${input}"` });
+            videoId = found.videoId;
+            title = found.title;
+        }
+
+        if (!rooms.has(currentRoom)) return;
+
+        title = title || await getVideoTitle(videoId) || `Song by ${userName}`;
         const languageHint = clientLangHint || detectLanguageFromTitle(title);
 
         const song = {
@@ -378,16 +513,10 @@ io.on('connection', (socket) => {
 
         console.log(`Queued: ${title} (${videoId})`);
 
-        // If something is already playing, pre-prepare this song in background
-        // (if play loop not running, it will prepare it when it starts)
-        if (room.currentSong && !isVideoReady(videoId)) {
-            prepareVideo(videoId, song.languageHint, null, null)
-                .then(() => {
-                    const r = rooms.get(currentRoom);
-                    if (r) io.to(currentRoom).emit('queue-updated', { queue: enrichQueue(r.queue) });
-                })
-                .catch(err => console.error(`Pre-prepare failed for ${videoId}: ${err.message}`));
-        }
+        // If something is already playing, start warming the queue in the
+        // background (if the play loop isn't running, it'll prepare the head
+        // of the queue directly when it starts)
+        if (room.currentSong) scheduleAheadPrep();
 
         // Start play loop if not already running
         runPlayLoop(currentRoom);
@@ -399,10 +528,29 @@ io.on('connection', (socket) => {
         io.to(currentRoom).emit('notification', { message: `Song skipped by ${userName}` });
     });
 
-    socket.on('song-ended', () => {
-        if (!currentRoom) return;
+    // Any client's ended video advances the queue (first one wins; the songId
+    // guard makes it idempotent). This keeps the party moving even when the
+    // host is on a phone and never plays the video themselves. songId is
+    // required — a stale client can't blind-fire the current song away.
+    socket.on('song-ended', (data) => {
+        if (!currentRoom || !data?.songId) return;
         const room = rooms.get(currentRoom);
-        if (room && socket.id === room.hostId) signalSongEnd(currentRoom);
+        if (room?.currentSongStartedAt) {
+            const elapsed = ((Date.now() - room.currentSongStartedAt) / 1000).toFixed(1);
+            console.log(`song-ended from ${userName} after ${elapsed}s (songId ${data.songId})`);
+        }
+        signalSongEnd(currentRoom, data.songId);
+    });
+
+    // A client noticed the cached file is shorter than the real song
+    // (truncated download) — purge it so the next play re-downloads.
+    socket.on('video-corrupt', (data) => {
+        const videoId = data?.videoId;
+        if (!currentRoom || !VIDEO_ID_RE.test(videoId || '')) return;
+        console.warn(`Corrupt cached video reported by ${userName}: ${videoId} (${data.got}s, expected ${data.expected}s) - purging`);
+        for (const ext of ['.mp4', '.mp3', '.json']) {
+            try { fs.unlinkSync(path.join(VIDEOS_DIR, `${videoId}${ext}`)); } catch {}
+        }
     });
 
     socket.on('remove-song', ({ songId }) => {
@@ -412,12 +560,25 @@ io.on('connection', (socket) => {
         io.to(currentRoom).emit('queue-updated', { queue: enrichQueue(room.queue) });
     });
 
-    socket.on('toggle-play', ({ isPlaying }) => {
+    // Play/pause works like skip: anyone at the party can hit it, including
+    // phones that don't have a local player. Every client with a video toggles.
+    socket.on('toggle-play-request', () => {
+        if (!currentRoom) return;
+        io.to(currentRoom).emit('remote-toggle-play');
+    });
+
+    // Host's playback clock — relayed so other screens can correct drift.
+    socket.on('time-sync', (data) => {
         if (!currentRoom) return;
         const room = rooms.get(currentRoom);
         if (room && socket.id === room.hostId) {
-            io.to(currentRoom).emit('play-state-changed', { isPlaying });
+            socket.to(currentRoom).emit('time-sync', data);
         }
+    });
+
+    // Client-side playback diagnostics (stalls etc.) — surfaced in this console
+    socket.on('client-debug', (data) => {
+        console.warn(`[client ${userName}]`, JSON.stringify(data));
     });
 
     socket.on('heartbeat', () => {});

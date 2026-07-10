@@ -16,18 +16,25 @@ def separate_vocals(audio_path):
         import torchaudio
         from demucs.pretrained import get_model
         from demucs.apply import apply_model
-        
+        from audio_io import load_audio
+
+        # Free throughput on Ampere+/Ada GPUs for Demucs's conv-heavy model;
+        # cudnn.benchmark auto-picks faster conv algorithms for the input size.
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.backends.cudnn.benchmark = True
+
         print("Separating vocals with Demucs...", file=sys.stderr)
-        
+
         device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"Demucs using device: {device}", file=sys.stderr)
-        
+
         # Load model (htdemucs is fast and good quality)
         model = get_model("htdemucs")
         model.to(device)
-        
-        # Load audio
-        wav, sr = torchaudio.load(audio_path)
+
+        # Load audio (ffmpeg fallback handles mp3, which has no torchaudio backend)
+        wav, sr = load_audio(audio_path)
         
         # Resample to model's sample rate if needed
         if sr != model.samplerate:
@@ -81,20 +88,27 @@ def main():
     audio_path = sys.argv[1]
     model_name = sys.argv[2]
     output_path = sys.argv[3]
-    language_hint = sys.argv[4] if len(sys.argv) > 4 else None
-    
+    language_hint = (sys.argv[4] or None) if len(sys.argv) > 4 else None
+    # Optional pre-separated vocals from the caller — skip demucs if provided.
+    prevocals = sys.argv[5] if len(sys.argv) > 5 else None
+
     try:
         import torch
         from faster_whisper import WhisperModel
-        
+
         # Clear GPU memory
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-        
-        # Try to separate vocals first
-        vocals_path = separate_vocals(audio_path)
-        transcribe_path = vocals_path if vocals_path else audio_path
+
+        # Use caller-provided vocals if given (caller owns cleanup), else separate.
+        if prevocals and os.path.exists(prevocals):
+            print("Using pre-separated vocals", file=sys.stderr)
+            vocals_path = None              # not ours to delete
+            transcribe_path = prevocals
+        else:
+            vocals_path = separate_vocals(audio_path)
+            transcribe_path = vocals_path if vocals_path else audio_path
         
         device = "cuda" if torch.cuda.is_available() else "cpu"
         compute_type = "float16" if device == "cuda" else "int8"

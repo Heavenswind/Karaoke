@@ -1,6 +1,8 @@
 node_modules/
 videos/
 .claude/
+cookies.txt
+__pycache__/
 *.mp3
 *.mp4
 *.json
