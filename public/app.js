@@ -155,6 +155,9 @@ function joinRoom(asHost) {
     displayRoomId.textContent = roomId;
     window.history.pushState({}, '', `?room=${roomId}`);
     stopRoomsPolling();
+    // Room-only timers: no point watching a player that doesn't exist yet
+    startStallWatchdog();
+    startTimeSync();
 }
 
 hostBtn.addEventListener('click', () => joinRoom());
@@ -495,15 +498,32 @@ function renderOverlay(state, t) {
     }
 }
 
+// A 100ms interval repainted the word fill at only 10 Hz, so it visibly stepped.
+// rAF paints it once per frame instead; background tabs get throttled by the
+// browser, which is exactly the behaviour we want.
 function startLyricsSync() {
     stopLyricsSync();
-    lyricsTimer = setInterval(() => {
-        if (player && currentLyrics.length > 0) updateLyricsDisplay(player.currentTime);
-    }, 100);
+    const tick = () => {
+        // A cancelled frame can still be in flight, so re-check the handle
+        if (!lyricsTimer) return;
+        // Keep ticking while merely paused (a seek still needs a repaint), but
+        // give up once there's nothing left to draw onto. showVideoLoading()
+        // swaps the whole stage out on a skip, which leaves these variables
+        // pointing at detached nodes rather than nulling them — so test the
+        // node, not the reference, or the loop spins on a dead tree.
+        if (!player || currentLyrics.length === 0
+            || !lyricsOverlay || !lyricsOverlay.isConnected) {
+            stopLyricsSync();
+            return;
+        }
+        updateLyricsDisplay(player.currentTime);
+        lyricsTimer = requestAnimationFrame(tick);
+    };
+    lyricsTimer = requestAnimationFrame(tick);
 }
 
 function stopLyricsSync() {
-    if (lyricsTimer) clearInterval(lyricsTimer);
+    if (lyricsTimer) cancelAnimationFrame(lyricsTimer);
     lyricsTimer = null;
 }
 
@@ -598,48 +618,75 @@ socket.on('remote-toggle-play', () => {
 
 // Stall watchdog: if the clock freezes while "playing", report diagnostics to
 // the server console so we can see which layer starved (network vs decode).
+// Only runs inside a room — on the join screen there is no player to watch.
 const stallCheck = { t: -1, since: 0, reported: false };
-setInterval(() => {
-    if (!player || player.paused || player.ended || !currentSong) {
-        stallCheck.t = -1;
-        stallCheck.reported = false;
-        return;
-    }
-    if (player.currentTime !== stallCheck.t) {
-        stallCheck.t = player.currentTime;
-        stallCheck.since = Date.now();
-        stallCheck.reported = false;
-        return;
-    }
-    if (stallCheck.reported || Date.now() - stallCheck.since < 6000) return;
-    stallCheck.reported = true;
-    const buffered = player.buffered.length ? player.buffered.end(player.buffered.length - 1) : 0;
-    const q = player.getVideoPlaybackQuality ? player.getVideoPlaybackQuality() : {};
-    socket.emit('client-debug', {
-        what: 'playback-stall',
-        videoId: currentSong.videoId,
-        at: Math.round(player.currentTime * 10) / 10,
-        bufferedTo: Math.round(buffered * 10) / 10,
-        readyState: player.readyState,
-        networkState: player.networkState,
-        droppedFrames: q.droppedVideoFrames,
-        decodedFrames: q.totalVideoFrames,
-        mediaError: player.error ? player.error.code : null
-    });
-    showNotification('Playback stalled — diagnostics sent to the server console', 5000, true);
-}, 2000);
+let stallCheckInterval = null;
+
+function startStallWatchdog() {
+    if (stallCheckInterval) clearInterval(stallCheckInterval);
+    stallCheckInterval = setInterval(() => {
+        if (!player || player.paused || player.ended || !currentSong) {
+            stallCheck.t = -1;
+            stallCheck.reported = false;
+            return;
+        }
+        if (player.currentTime !== stallCheck.t) {
+            stallCheck.t = player.currentTime;
+            stallCheck.since = Date.now();
+            stallCheck.reported = false;
+            return;
+        }
+        if (stallCheck.reported || Date.now() - stallCheck.since < 6000) return;
+        stallCheck.reported = true;
+        const buffered = player.buffered.length ? player.buffered.end(player.buffered.length - 1) : 0;
+        const q = player.getVideoPlaybackQuality ? player.getVideoPlaybackQuality() : {};
+        socket.emit('client-debug', {
+            what: 'playback-stall',
+            videoId: currentSong.videoId,
+            at: Math.round(player.currentTime * 10) / 10,
+            bufferedTo: Math.round(buffered * 10) / 10,
+            readyState: player.readyState,
+            networkState: player.networkState,
+            droppedFrames: q.droppedVideoFrames,
+            decodedFrames: q.totalVideoFrames,
+            mediaError: player.error ? player.error.code : null
+        });
+        showNotification('Playback stalled — diagnostics sent to the server console', 5000, true);
+    }, 2000);
+}
+
+function stopStallWatchdog() {
+    if (stallCheckInterval) clearInterval(stallCheckInterval);
+    stallCheckInterval = null;
+    stallCheck.t = -1;
+    stallCheck.since = 0;
+    stallCheck.reported = false;
+}
 
 // Host broadcasts its playback clock; other screens correct drift so the
-// whole room sings the same word at the same time.
-setInterval(() => {
-    if (isHost && player && currentSong) {
-        socket.emit('time-sync', {
-            songId: currentSong.id,
-            t: player.currentTime,
-            paused: player.paused
-        });
-    }
-}, 4000);
+// whole room sings the same word at the same time. Also room-scoped.
+let timeSyncInterval = null;
+
+function startTimeSync() {
+    if (timeSyncInterval) clearInterval(timeSyncInterval);
+    timeSyncInterval = setInterval(() => {
+        if (isHost && player && currentSong) {
+            socket.emit('time-sync', {
+                songId: currentSong.id,
+                t: player.currentTime,
+                paused: player.paused
+            });
+        }
+    }, 4000);
+}
+
+function stopTimeSync() {
+    if (timeSyncInterval) clearInterval(timeSyncInterval);
+    timeSyncInterval = null;
+}
+
+// Nothing in the UI leaves a room yet, so stopStallWatchdog/stopTimeSync are the
+// teardown hooks for whenever a leave/room-closed path lands.
 
 socket.on('time-sync', (data) => {
     if (isHost || !currentSong || data.songId !== currentSong.id) return;

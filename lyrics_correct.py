@@ -54,6 +54,8 @@ _JUNK_RE = re.compile(
 )
 _PUNCT_RE = re.compile(r"[^\w]", re.UNICODE)
 _CJK_RE = re.compile(r"[぀-ヿ一-鿿가-힣]")  # kana, CJK ideographs, hangul
+# [mm:ss], [mm:ss.cc], [mm:ss.ccc] — anything else in brackets is a metadata tag.
+_LRC_TS_RE = re.compile(r"\[(\d+):(\d{1,2}(?:[.:]\d{1,3})?)\]")
 
 
 # ─── HTTP / lrclib ────────────────────────────────────────────────────────────
@@ -106,31 +108,72 @@ def parse_artist_track(youtube_title):
     return None, _clean_track(t)
 
 
-@functools.lru_cache(maxsize=64)
-def fetch_official_lyrics(track, artist, duration):
-    """Return plain official lyrics text, or None if no confident match.
+def _usable_record(rec):
+    """An lrclib record we can proofread against: has text, isn't instrumental."""
+    return bool(isinstance(rec, dict) and rec.get("plainLyrics")
+                and not rec.get("instrumental"))
+
+
+def fetch_official_bundle(track, artist, duration):
+    """Return {"plain": text|None, "synced": lrc|None} for the best lrclib match.
 
     Internally parallel: get + search, and the original/swapped artist-track
     order retry, all fire concurrently instead of up to 4 requests in a row —
     lrclib.net was observed to take 7-10s per request even on a clean miss, so
     doing them one at a time was the main source of latency here. Cached so a
     repeat call with the same (track, artist, duration) is free.
+
+    "synced" is the LRC timeline lrclib ships alongside the plain text; plenty
+    of records don't have one, so it's None more often than "plain" is.
+
+    Handing back a copy: the cache used to hold an immutable string, and a dict
+    returned by identity would let one caller's edit poison every later lookup.
     """
+    return dict(_official_bundle_cached(track, artist, duration))
+
+
+@functools.lru_cache(maxsize=64)
+def _official_bundle_cached(track, artist, duration):
     attempts = [(track, artist)]
     if track and artist:
         attempts.append((artist, track))  # "TRACK ／ ARTIST" titles can parse swapped
+        # Last resort: the title gave us two names but we may have guessed the
+        # wrong one for the artist (or it isn't an artist at all). Searching on
+        # the track alone is safe because try_search still requires the record's
+        # duration to land within DURATION_TOLERANCE of this video's.
+        attempts.append((track, None))
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(attempts)) as ex:
-        results = [f.result() for f in [ex.submit(_fetch_official_once, t, a, duration)
-                                         for t, a in attempts]]
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(attempts)) as ex:
+            results = [f.result() for f in [ex.submit(_fetch_official_once, t, a, duration)
+                                             for t, a in attempts]]
+    except Exception:
+        return {"plain": None, "synced": None}
 
     for r in results:
         if r:
-            return r
-    return None
+            # Report the names on the record we actually matched, not the guess
+            # that happened to find it -- the guess is routinely reversed, and
+            # echoing it back made the logs claim things like "Crawling" was the
+            # artist. It is also the better label to hand downstream.
+            return {"plain": r.get("plainLyrics"),
+                    "synced": r.get("syncedLyrics") or None,
+                    "artist": r.get("artistName") or None,
+                    "track": r.get("trackName") or None}
+    return {"plain": None, "synced": None, "artist": None, "track": None}
+
+
+def fetch_official_lyrics(track, artist, duration):
+    """Return plain official lyrics text, or None if no confident match.
+
+    Thin view over fetch_official_bundle, which carries the cache — no second
+    lru_cache here so both entry points share one set of network results.
+    """
+    return fetch_official_bundle(track, artist, duration)["plain"]
 
 
 def _fetch_official_once(track, artist, duration):
+    """Best matching lrclib record (the full dict), or None."""
     def try_get():
         # Precise lookup when we have everything — but the exact-match
         # endpoint appears to hang rather than fail fast on a near-miss, so
@@ -141,7 +184,7 @@ def _fetch_official_once(track, artist, duration):
             params = {"track_name": track, "artist_name": artist,
                       "duration": int(round(duration))}
             data = _http_json(f"{LRCLIB_API}/get?" + urlencode(params))
-            return data["plainLyrics"] if data and data.get("plainLyrics") else None
+            return data if _usable_record(data) else None
         except Exception:
             return None
 
@@ -156,15 +199,22 @@ def _fetch_official_once(track, artist, duration):
             if not q:
                 return None
             results = _http_json(f"{LRCLIB_API}/search?" + urlencode(q))
-            cand = [r for r in results if r.get("plainLyrics")] if isinstance(results, list) else []
+            cand = [r for r in results if _usable_record(r)] if isinstance(results, list) else []
             if not cand:
                 return None
             if duration:
-                cand.sort(key=lambda r: abs((r.get("duration") or 0) - duration))
+                # Secondary key only breaks ties on duration distance: between
+                # two equally close records, take the one that also has an LRC.
+                cand.sort(key=lambda r: (abs((r.get("duration") or 0) - duration),
+                                         not r.get("syncedLyrics")))
                 if abs((cand[0].get("duration") or 0) - duration) <= DURATION_TOLERANCE:
-                    return cand[0]["plainLyrics"]
+                    return cand[0]
                 return None
-            return cand[0]["plainLyrics"]
+            # No duration to rank on, so every hit is equally plausible — then
+            # an LRC is the tiebreaker worth having, since it's what drives the
+            # karaoke line splitting.
+            cand.sort(key=lambda r: not r.get("syncedLyrics"))
+            return cand[0]
         except Exception:
             return None
 
@@ -173,6 +223,43 @@ def _fetch_official_once(track, artist, duration):
         fs = ex.submit(try_search)
         get_result, search_result = fg.result(), fs.result()
     return get_result or search_result
+
+
+def parse_lrc(synced_text):
+    """Parse LRC text into [{"start": seconds, "text": line}], sorted by start.
+
+    Metadata tags ([ar:...], [offset:...] …) aren't timestamps, so they're
+    skipped; a line can carry several timestamps when the same words repeat
+    (chorus), and each one becomes its own entry. Never raises — bad or missing
+    input just yields [].
+    """
+    if not synced_text or not isinstance(synced_text, str):
+        return []
+    out = []
+    try:
+        for line in synced_text.splitlines():
+            line = line.strip()
+            pos, stamps = 0, []
+            for m in _LRC_TS_RE.finditer(line):
+                # only the run of leading timestamps counts, but writers space
+                # them out as often as they pack them: "[00:15.00] [00:20.50] x"
+                if line[pos:m.start()].strip():
+                    break
+                stamps.append(m)
+                pos = m.end()
+            if not stamps:
+                continue
+            text = line[pos:].strip()
+            if not text:
+                continue
+            for m in stamps:
+                # some writers use [mm:ss:cc] instead of [mm:ss.cc]
+                secs = int(m.group(1)) * 60 + float(m.group(2).replace(":", "."))
+                out.append({"start": round(secs, 2), "text": text})
+    except Exception:
+        return []
+    out.sort(key=lambda e: e["start"])
+    return out
 
 
 # ─── Normalization / tokenizing ───────────────────────────────────────────────
@@ -366,11 +453,15 @@ def _correct_cjk_chars(result, official_text):
 
 
 def correct_with_official_lyrics(result, youtube_title=None, artist=None,
-                                 track=None, duration=None, language=None):
+                                 track=None, duration=None, language=None,
+                                 official=None):
     """
     Mutate `result` (a transcription dict with segments[].words[]) in place,
     swapping misheard words for the official spelling while keeping timestamps.
     Returns a small stats dict, or None if nothing was corrected.
+
+    Pass `official` when the lyrics were already fetched elsewhere — that keeps
+    the lrclib round-trip off this (GPU-bound) path entirely.
     """
     lang = (language or "").lower()
     cjk = lang in CJK_CORRECTABLE_LANGS
@@ -384,7 +475,8 @@ def correct_with_official_lyrics(result, youtube_title=None, artist=None,
     if not track:
         return None
 
-    official = fetch_official_lyrics(track, artist, duration)
+    if not official:
+        official = fetch_official_lyrics(track, artist, duration)
     if not official:
         return None
 
@@ -478,9 +570,40 @@ def correct_with_official_lyrics(result, youtube_title=None, artist=None,
 
 # ─── CLI test harness ─────────────────────────────────────────────────────────
 # Usage: python lyrics_correct.py "<artist>" "<track>" [duration]
+#    or: python lyrics_correct.py --fetch --title "<youtube title>"
+#                                 [--artist A] [--track T] [--duration 213.5]
 if __name__ == "__main__":
     if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
         sys.stdout.reconfigure(encoding="utf-8")  # Windows console is cp1252
+
+    if "--fetch" in sys.argv[1:]:
+        # Machine-readable mode so the server can pre-fetch lyrics in its own
+        # process — the 7-10s lrclib latency then overlaps the download instead
+        # of stalling the GPU pipeline. One JSON line out, nulls on any failure.
+        def _flag(name):
+            argv = sys.argv
+            return argv[argv.index(name) + 1] if name in argv and argv.index(name) + 1 < len(argv) else None
+
+        out = {"plain": None, "synced": None, "artist": None, "track": None}
+        try:
+            f_artist, f_track = _flag("--artist"), _flag("--track")
+            f_dur = _flag("--duration")
+            f_duration = float(f_dur) if f_dur else None
+            if not f_track:
+                pa, pt = parse_artist_track(_flag("--title"))
+                f_artist = f_artist or pa
+                f_track = pt
+            if f_track:
+                bundle = fetch_official_bundle(f_track, f_artist, f_duration)
+                out = {"plain": bundle["plain"], "synced": bundle["synced"],
+                       "artist": bundle.get("artist") or f_artist,
+                       "track": bundle.get("track") or f_track}
+        except Exception as e:
+            print(f"lyrics fetch failed: {e}", file=sys.stderr)
+            out = {"plain": None, "synced": None, "artist": None, "track": None}
+        print(json.dumps(out, ensure_ascii=False))
+        sys.exit(0)
+
     artist = sys.argv[1] if len(sys.argv) > 1 else None
     track = sys.argv[2] if len(sys.argv) > 2 else None
     duration = float(sys.argv[3]) if len(sys.argv) > 3 else None

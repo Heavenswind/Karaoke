@@ -48,18 +48,26 @@ Open `http://localhost:3000` on the TV. Friends connect via your local IP (e.g. 
 
 ## Whisper Model
 
-Set via environment variable (default: `small`):
+Set via environment variable (default: `large-v3`):
 
 ```bash
-WHISPER_MODEL=large-v3 npm start
+WHISPER_MODEL=small npm start
 ```
 
-| Model    | Speed   | Accuracy | VRAM  |
-|----------|---------|----------|-------|
-| tiny     | Fastest | Low      | ~1GB  |
-| small    | Fast    | Good     | ~2GB  |
-| medium   | Slow    | Better   | ~5GB  |
-| large-v3 | Slowest | Best     | ~10GB |
+| Model    | Accuracy on singing | VRAM (measured, float16) |
+|----------|---------------------|--------------------------|
+| tiny     | Low                 | ~1GB                     |
+| small    | Mishears often      | ~0.7GB                   |
+| medium   | Better              | ~2.5GB                   |
+| large-v3 | Best                | ~3.9GB                   |
+
+`large-v3` is the default because on a mid-range GPU it is not actually slower:
+`small` spends its time looping on hallucinated lyrics, so on a 4070 the big
+model finished a test song in 5.6s against `small`'s 7.4s — and got the words
+right. Drop to `small` only if you're short on VRAM.
+
+Models are held in VRAM by a worker process that exits after 10 minutes of
+silence (`WORKER_IDLE_MS`), so the GPU is free between parties.
 
 ## Room Management
 

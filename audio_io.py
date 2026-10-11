@@ -3,8 +3,8 @@
 Robust audio loading for the ML stack.
 
 torchaudio's only backend here (soundfile/libsndfile) can't open mp3, so we fall
-back to decoding through ffmpeg into a temp WAV. Used by both demucs vocal
-separation and forced alignment so neither silently fails on mp3 input.
+back to decoding through ffmpeg into a temp WAV. Used by demucs vocal separation
+so it doesn't silently fail on anything but wav.
 """
 
 import os

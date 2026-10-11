@@ -1,42 +1,58 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const pipeline = require('./pipeline');
 
 const app = express();
 app.use(express.json());
 
-const VIDEOS_DIR = path.join(__dirname, 'videos');
+const VIDEOS_DIR = pipeline.VIDEOS_DIR;
 if (!fs.existsSync(VIDEOS_DIR)) fs.mkdirSync(VIDEOS_DIR, { recursive: true });
 
-app.use('/videos', express.static(VIDEOS_DIR));
+// Every video URL carries its file's mtime (see videoUrlFor), so a given URL
+// really is immutable and guests can cache it hard. A re-downloaded video gets
+// a new URL rather than a stale hit.
+app.use('/videos', express.static(VIDEOS_DIR, { maxAge: '365d', immutable: true }));
 
-let whisperModel = process.env.WHISPER_MODEL || 'small';
+const whisperModel = pipeline.WHISPER_MODEL;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function isVideoReady(videoId) {
-    return fs.existsSync(path.join(VIDEOS_DIR, `${videoId}.mp4`))
-        && fs.existsSync(path.join(VIDEOS_DIR, `${videoId}.json`));
+const isVideoReady = pipeline.isVideoReady;
+
+function videoUrlFor(videoId) {
+    let v = 0;
+    try { v = Math.round(fs.statSync(path.join(VIDEOS_DIR, `${videoId}.mp4`)).mtimeMs); } catch {}
+    return `/videos/${videoId}.mp4?v=${v}`;
 }
 
 function loadCachedTranscription(videoId) {
-    const p = path.join(VIDEOS_DIR, `${videoId}.json`);
-    if (!fs.existsSync(p)) return null;
-    try {
-        // strip a UTF-8 BOM - Windows editors add one when users hand-fix lyrics
-        let raw = fs.readFileSync(p, 'utf-8');
-        if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
-        return JSON.parse(raw);
-    } catch { return null; }
+    return pipeline.readJson(path.join(VIDEOS_DIR, `${videoId}.json`));
 }
 
 // Downloaded songs are kept as a cache (replays skip the whole pipeline).
 // Oldest songs are pruned when the cache grows past MAX_CACHE_MB.
 const MAX_CACHE_MB = parseInt(process.env.MAX_CACHE_MB || '8192', 10);
+
+// A wav is a transcription intermediate; it should only exist while a song is
+// being prepared. One left behind by a crashed run is dead weight the size cap
+// never even saw, since it only ever counted files next to an .mp4.
+function sweepStaleWavs() {
+    const busy = new Set(pipeline.status().inflight);
+    let files;
+    try { files = fs.readdirSync(VIDEOS_DIR); } catch { return; }
+    for (const f of files) {
+        if (!f.endsWith('.wav') || busy.has(f.slice(0, -4))) continue;
+        try {
+            fs.unlinkSync(path.join(VIDEOS_DIR, f));
+            console.log(`Removed stale audio: ${f}`);
+        } catch {}
+    }
+}
 
 function pruneCache(protectedIds = new Set()) {
     let entries;
@@ -45,7 +61,7 @@ function pruneCache(protectedIds = new Set()) {
             .filter(f => f.endsWith('.mp4'))
             .map(f => {
                 const id = f.slice(0, -4);
-                const files = ['.mp4', '.mp3', '.json']
+                const files = ['.mp4', '.mp3', '.wav', '.json']
                     .map(ext => path.join(VIDEOS_DIR, id + ext))
                     .filter(p => fs.existsSync(p));
                 return {
@@ -127,109 +143,43 @@ async function getVideoTitle(videoId) {
 }
 
 // ─── Download + Transcribe ───────────────────────────────────────────────────
-// Runs one at a time — no concurrent GPU access
+// Several songs can be downloading at once; the GPU still takes them strictly
+// one at a time. pipeline.js owns both, and dedupes concurrent requests for the
+// same song onto a single preparation.
 
-let pipelineBusy = false;
-let pipelineVideoId = null; // which video is currently in the pipeline (for queue status)
+const STATUS_MESSAGES = {
+    downloading_audio: '🎵 Fetching the audio...',
+    downloading_video: '📥 Downloading video...',
+    separating: '🎚️ Separating vocals...',
+    transcribing: '🎤 Transcribing lyrics...',
+    correcting: '📝 Checking against the official lyrics...'
+};
 
-function runPipeline(videoId, languageHint, io, roomId) {
-    return new Promise((resolve, reject) => {
-        const scriptPath = path.join(__dirname, 'download_video.py');
-        const args = [scriptPath, videoId, whisperModel, VIDEOS_DIR];
-        if (languageHint) args.push(languageHint);
-
-        const python = spawn('python', args);
-        let lastLine = '';
-
-        python.stdout.on('data', (data) => {
-            for (const line of data.toString().split('\n').filter(l => l.trim())) {
-                try {
-                    const parsed = JSON.parse(line);
-                    if (parsed.status) {
-                        const messages = {
-                            downloading_video: '📥 Downloading video...',
-                            extracting_audio: '🎵 Extracting audio...',
-                            transcribing: '🎤 Transcribing lyrics...'
-                        };
-                        if (io && roomId) io.to(roomId).emit('video-status', {
-                            status: parsed.status,
-                            message: messages[parsed.status] || parsed.status
-                        });
-                    }
-                    if (parsed.success !== undefined) lastLine = line;
-                } catch { lastLine = line; }
-            }
-        });
-
-        python.stderr.on('data', (data) => console.error(`[python] ${data}`));
-
-        python.on('close', (code) => {
-            try { resolve(JSON.parse(lastLine)); }
-            catch { reject(new Error(`Pipeline failed (code ${code})`)); }
-        });
-
-        python.on('error', reject);
-    });
+function prepareVideo(videoId, languageHint, io, roomId) {
+    const onStatus = (io && roomId)
+        ? (status) => io.to(roomId).emit('video-status', {
+            status, message: STATUS_MESSAGES[status] || status
+        })
+        : null;
+    return pipeline.prepareVideo(videoId, languageHint, onStatus);
 }
 
-async function prepareVideo(videoId, languageHint, io, roomId) {
-    if (isVideoReady(videoId)) return { success: true, cached: true };
-
-    // Wait if pipeline is busy
-    while (pipelineBusy) await new Promise(r => setTimeout(r, 500));
-
-    // Check again after waiting — maybe it was prepared while we waited
-    if (isVideoReady(videoId)) return { success: true, cached: true };
-
-    pipelineBusy = true;
-    pipelineVideoId = videoId;
-    try {
-        const result = await runPipeline(videoId, languageHint, io, roomId);
-        return result;
-    } finally {
-        pipelineBusy = false;
-        pipelineVideoId = null;
-        scheduleAheadPrep(); // GPU just freed up — see if there's more queue to warm
+function broadcastQueueFor(videoId) {
+    for (const [rid, room] of rooms) {
+        if (room.queue.some(s => s.videoId === videoId)) {
+            io.to(rid).emit('queue-updated', { queue: enrichQueue(room.queue) });
+        }
     }
 }
 
-// Keeps the GPU busy for the whole queue, not just the next song: whenever
-// the pipeline frees up, this prepares the earliest not-yet-ready queued
-// song across every room (there's one shared GPU) and chains into the next
-// one. Without this, prep stopped after just the immediate next song was
-// ready and the GPU sat idle for the rest of a long song's playback.
-let aheadPrepScheduled = false;
-// Songs that already failed an ahead-of-queue prepare attempt this run — skip
-// them so a permanently-bad link doesn't get retried in a tight loop. The song
-// still gets one fresh, real attempt (and the usual drop-if-it-fails handling)
-// once it actually reaches the head of the queue in runPlayLoop.
-const aheadPrepFailed = new Set();
-
+// Keeps the machine busy for the whole queue, not just the next song. Cheap to
+// over-call: ready songs are skipped, in-flight songs join the preparation
+// that's already running, and pipeline.js caps how much runs at once.
 function scheduleAheadPrep() {
-    if (aheadPrepScheduled || pipelineBusy) return;
-    aheadPrepScheduled = true;
-    setImmediate(runAheadPrep);
-}
-
-async function runAheadPrep() {
-    aheadPrepScheduled = false;
-    for (const [rid, room] of rooms) {
-        const target = room.queue.find(s => !isVideoReady(s.videoId) && !aheadPrepFailed.has(s.videoId));
-        if (!target) continue;
-        try {
-            const result = await prepareVideo(target.videoId, target.languageHint, null, null);
-            if (!result || (!result.success && !result.cached)) {
-                aheadPrepFailed.add(target.videoId);
-                console.error(`Pre-prepare failed for ${target.videoId}: ${result?.error || 'unknown error'}`);
-            } else {
-                const r = rooms.get(rid);
-                if (r) io.to(rid).emit('queue-updated', { queue: enrichQueue(r.queue) });
-            }
-        } catch (err) {
-            aheadPrepFailed.add(target.videoId);
-            console.error(`Pre-prepare failed for ${target.videoId}: ${err.message}`);
-        }
-        return; // prepareVideo's finally already chains the next one via scheduleAheadPrep
+    const queued = [];
+    for (const room of rooms.values()) queued.push(...room.queue);
+    for (const { videoId, promise } of pipeline.warm(queued)) {
+        promise.then(() => broadcastQueueFor(videoId)).catch(() => {});
     }
 }
 
@@ -249,7 +199,7 @@ function enrichQueue(queue) {
         ...s,
         videoReady: isVideoReady(s.videoId),
         lyricsReady: fs.existsSync(path.join(VIDEOS_DIR, `${s.videoId}.json`)),
-        preparing: pipelineVideoId === s.videoId
+        preparing: pipeline.isPreparing(s.videoId)
     }));
 }
 
@@ -355,7 +305,7 @@ app.get('/api/video/prepare/:videoId', async (req, res) => {
         const cached = loadCachedTranscription(videoId);
         return res.json({
             success: true, cached: true,
-            videoUrl: `/videos/${videoId}.mp4`,
+            videoUrl: videoUrlFor(videoId),
             segments: cached?.segments || [],
             lyrics: cached?.text || '',
             language: cached?.language || 'unknown',
@@ -368,7 +318,7 @@ app.get('/api/video/prepare/:videoId', async (req, res) => {
 app.get('/api/video/status/:videoId', (req, res) => {
     const { videoId } = req.params;
     const ready = isVideoReady(videoId);
-    res.json({ ready, videoUrl: ready ? `/videos/${videoId}.mp4` : null });
+    res.json({ ready, videoUrl: ready ? videoUrlFor(videoId) : null });
 });
 
 app.get('/api/rooms', (req, res) => {
@@ -425,7 +375,7 @@ app.get('/api/rooms/:roomId', (req, res) => {
 });
 
 app.get('/api/status', (req, res) => {
-    res.json({ whisper: { model: whisperModel }, pipelineBusy });
+    res.json({ whisper: { model: whisperModel }, ...pipeline.status() });
 });
 
 // ─── Socket.io ───────────────────────────────────────────────────────────────
@@ -498,7 +448,7 @@ io.on('connection', (socket) => {
         const languageHint = clientLangHint || detectLanguageFromTitle(title);
 
         const song = {
-            id: uuidv4(),
+            id: randomUUID(),
             videoId, url, title,
             addedBy: userName,
             addedAt: Date.now(),
@@ -605,4 +555,13 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`🎤 Karaoke server running on http://localhost:${PORT}`));
+server.listen(PORT, () => {
+    console.log(`🎤 Karaoke server running on http://localhost:${PORT}`);
+    console.log(`   Whisper model: ${whisperModel}`);
+    sweepStaleWavs();   // clear intermediates a previous run died holding
+});
+
+// The GPU worker is a child process; let it release its VRAM on the way out.
+for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => { pipeline.stopWorker(); process.exit(0); });
+}
