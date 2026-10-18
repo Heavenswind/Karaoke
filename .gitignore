@@ -8,3 +8,8 @@ __pycache__/
 *.json
 !package.json
 !package-lock.json
+
+# Secrets — never commit these.
+.env
+.env.*
+!.env.example

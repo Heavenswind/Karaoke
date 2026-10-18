@@ -2,6 +2,8 @@
 
 Real-time karaoke app for local parties. Friends join from their phones, add YouTube songs to a shared queue, and the TV plays them with word-by-word lyrics sync.
 
+**Who it's for:** anyone hosting a karaoke night at home who wants to sing any song without hunting for karaoke versions. I built it for parties with friends.
+
 ## How It Works
 
 1. Run the server on a PC/TV connected to speakers
@@ -83,3 +85,11 @@ curl http://localhost:3000/api/rooms/ROOMID
 # Delete a room
 curl -X DELETE http://localhost:3000/api/rooms/ROOMID
 ```
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md).
+
+## License
+
+[MIT](LICENSE)
